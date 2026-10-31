@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { RefreshCw, FileText, CheckCircle2, Truck } from 'lucide-react';
 import type { LiquidacionViaje } from '../types/liquidacion';
+import DescargarReporte from './DescargarReporte';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5098';
 
@@ -39,19 +40,25 @@ export const HistorialLiquidaciones: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex items-center justify-between pb-6 border-b border-slate-200 mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-slate-200 mb-8 gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Historial de Liquidaciones</h2>
           <p className="text-slate-500 text-sm mt-1">Registros aprobados y persistidos en PostgreSQL.</p>
         </div>
-        <button
-          onClick={cargarDatos}
-          disabled={cargando}
-          className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl text-sm font-semibold text-slate-700 transition"
-        >
-          <RefreshCw className={`w-4 h-4 ${cargando ? 'animate-spin' : ''}`} />
-          Refrescar
-        </button>
+        
+        {/* Acciones del encabezado: Refrescar y Descargar Consolidado Excel */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={cargarDatos}
+            disabled={cargando}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl text-sm font-semibold text-slate-700 transition cursor-pointer disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${cargando ? 'animate-spin' : ''}`} />
+            Refrescar
+          </button>
+
+          <DescargarReporte />
+        </div>
       </div>
 
       {error && (

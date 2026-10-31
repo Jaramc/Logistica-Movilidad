@@ -3,6 +3,7 @@ using TuProyecto.Application.Interfaces;
 using LogisticaBackend.Data;
 using LogisticaBackend.Models;
 using Microsoft.EntityFrameworkCore;
+using ClosedXML.Excel;
 
 namespace TuProyecto.API.Controllers;
 
@@ -118,5 +119,109 @@ public class LiquidacionesController : ControllerBase
             .ToListAsync();
 
         return Ok(lista);
+    }
+
+    [HttpGet("descargar-consolidado")]
+    public async Task<IActionResult> DescargarConsolidado()
+    {
+        try
+        {
+            List<LiquidacionViaje> liquidaciones = new();
+            if (_context != null)
+            {
+                liquidaciones = await _context.LiquidacionesViaje
+                    .OrderByDescending(x => x.FechaInicial)
+                    .ToListAsync();
+            }
+
+            using var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("Consolidado Liquidaciones");
+
+            // Encabezados de columnas
+            string[] headers = new[]
+            {
+                "ID", "Fecha Inicial", "Fecha Final", "Conductor", "Placa", "Manifiesto", 
+                "Empresa Transportadora", "Origen", "Destino",
+                "Peajes", "Porcentaje", "Comisión", "Parqueo", "ACPM", "Engrase", "Tensionada",
+                "Aseo", "Llantas", "Urea", "Cargue", "Descargue", "Carrosada", "Descarrosada",
+                "Papelería", "Otros",
+                "Total Gastos", "Traslado", "Básico", "Saldo Viaje", "Saldo Anterior", "Saldo Total",
+                "Estado", "Fecha Registro"
+            };
+
+            for (int i = 0; i < headers.Length; i++)
+            {
+                var cell = worksheet.Cell(1, i + 1);
+                cell.Value = headers[i];
+                cell.Style.Font.Bold = true;
+                cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#1E3A8A");
+                cell.Style.Font.FontColor = XLColor.White;
+                cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            }
+
+            int row = 2;
+            foreach (var l in liquidaciones)
+            {
+                worksheet.Cell(row, 1).Value = l.Id;
+                worksheet.Cell(row, 2).Value = l.FechaInicial.ToString("yyyy-MM-dd");
+                worksheet.Cell(row, 3).Value = l.FechaFinal.ToString("yyyy-MM-dd");
+                worksheet.Cell(row, 4).Value = l.Conductor;
+                worksheet.Cell(row, 5).Value = l.Placa;
+                worksheet.Cell(row, 6).Value = l.Manifiesto ?? "";
+                worksheet.Cell(row, 7).Value = l.EmpresaTransportadora ?? "";
+                worksheet.Cell(row, 8).Value = l.OrigenViaje ?? "";
+                worksheet.Cell(row, 9).Value = l.Destino ?? "";
+
+                worksheet.Cell(row, 10).Value = (double)l.Peajes;
+                worksheet.Cell(row, 11).Value = (double)l.Porcentaje;
+                worksheet.Cell(row, 12).Value = (double)l.Comision;
+                worksheet.Cell(row, 13).Value = (double)l.Parqueo;
+                worksheet.Cell(row, 14).Value = (double)l.Acpm;
+                worksheet.Cell(row, 15).Value = (double)l.Engrase;
+                worksheet.Cell(row, 16).Value = (double)l.Tensionada;
+                worksheet.Cell(row, 17).Value = (double)l.Aseo;
+                worksheet.Cell(row, 18).Value = (double)l.Llantas;
+                worksheet.Cell(row, 19).Value = (double)l.Urea;
+                worksheet.Cell(row, 20).Value = (double)l.Cargue;
+                worksheet.Cell(row, 21).Value = (double)l.Descargue;
+                worksheet.Cell(row, 22).Value = (double)l.Carrosada;
+                worksheet.Cell(row, 23).Value = (double)l.Descarrosada;
+                worksheet.Cell(row, 24).Value = (double)l.Papeleria;
+                worksheet.Cell(row, 25).Value = (double)l.Otros;
+
+                worksheet.Cell(row, 26).Value = (double)l.TotalGastos;
+                worksheet.Cell(row, 27).Value = (double)l.Traslado;
+                worksheet.Cell(row, 28).Value = (double)l.Basico;
+                worksheet.Cell(row, 29).Value = (double)l.SaldoViaje;
+                worksheet.Cell(row, 30).Value = (double)l.SaldoAnterior;
+                worksheet.Cell(row, 31).Value = (double)l.SaldoTotal;
+
+                for (int col = 10; col <= 31; col++)
+                {
+                    worksheet.Cell(row, col).Style.NumberFormat.Format = "$ #,##0";
+                }
+
+                worksheet.Cell(row, 32).Value = l.EstadoRevision;
+                worksheet.Cell(row, 33).Value = l.CreadoEn.ToString("yyyy-MM-dd HH:mm");
+                row++;
+            }
+
+            worksheet.Columns().AdjustToContents();
+
+            using var memoryStream = new MemoryStream();
+            workbook.SaveAs(memoryStream);
+            var fileContent = memoryStream.ToArray();
+
+            return File(
+                fileContent,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"Liquidaciones_Consolidadas_{DateTime.Now:yyyyMMdd}.xlsx"
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al generar el consolidado de Excel.");
+            return StatusCode(500, new { mensaje = "Error al exportar consolidado", error = ex.Message });
+        }
     }
 }
