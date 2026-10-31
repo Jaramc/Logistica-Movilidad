@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   UploadCloud, 
   Sparkles, 
@@ -10,13 +10,32 @@ import {
   AlertCircle, 
   Calendar, 
   Truck, 
-  FileText, 
-  Save, 
-  Eye
+  Calculator,
+  Image as ImageIcon
 } from 'lucide-react';
 import { type LiquidacionViaje, VALORES_INICIALES_LIQUIDACION } from '../types/liquidacion';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5098';
+
+// Lista de los 16 campos exactos del modelo SQL de gastos operativos
+const GASTOS_OPERATIVOS: { campo: keyof LiquidacionViaje; label: string }[] = [
+  { campo: 'peajes', label: '1. Peajes' },
+  { campo: 'acpm', label: '2. ACPM' },
+  { campo: 'parqueo', label: '3. Parqueo' },
+  { campo: 'comision', label: '4. Comisión' },
+  { campo: 'porcentaje', label: '5. Porcentaje' },
+  { campo: 'engrase', label: '6. Engrase' },
+  { campo: 'tensionada', label: '7. Tensionada' },
+  { campo: 'aseo', label: '8. Aseo' },
+  { campo: 'llantas', label: '9. Llantas' },
+  { campo: 'urea', label: '10. Urea' },
+  { campo: 'cargue', label: '11. Cargue' },
+  { campo: 'descargue', label: '12. Descargue' },
+  { campo: 'carrosada', label: '13. Carrosada' },
+  { campo: 'descarrosada', label: '14. Descarrosada' },
+  { campo: 'papeleria', label: '15. Papelería' },
+  { campo: 'otros', label: '16. Otros' },
+];
 
 export default function ProcesadorLiquidaciones() {
   const [archivo, setArchivo] = useState<File | null>(null);
@@ -26,15 +45,16 @@ export default function ProcesadorLiquidaciones() {
   const [mensajeExito, setMensajeExito] = useState<string | null>(null);
   const [mensajeError, setMensajeError] = useState<string | null>(null);
   
-  // Transformaciones de la imagen para inspección visual
+  // Transformaciones para el visor
   const [zoom, setZoom] = useState(1);
   const [rotacion, setRotacion] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Estado del formulario completo con todos los campos del modelo
+  // Formulario completo
   const [formData, setFormData] = useState<LiquidacionViaje>(VALORES_INICIALES_LIQUIDACION);
-  const [tabActiva, setTabActiva] = useState<'viaje' | 'gastos' | 'totales'>('gastos');
+  const [tabActiva, setTabActiva] = useState<'gastos' | 'viaje' | 'totales'>('gastos');
 
-  // Cálculo automático del total de gastos sumando los 16 campos
+  // Suma automática de los 16 rubros de gastos
   const sumaGastosCalculada = useMemo(() => {
     return (
       (formData.peajes || 0) +
@@ -61,12 +81,11 @@ export default function ProcesadorLiquidaciones() {
     formData.carrosada, formData.descarrosada, formData.papeleria, formData.otros
   ]);
 
-  // Sincronizar totales y saldos automáticamente
+  // Actualizar totales y saldos automáticamente
   useEffect(() => {
     setFormData(prev => {
       const saldoViajeCalculado = (prev.traslado || 0) + (prev.basico || 0) - sumaGastosCalculada;
       const saldoTotalCalculado = saldoViajeCalculado + (prev.saldoAnterior || 0);
-      
       return {
         ...prev,
         totalGastos: sumaGastosCalculada,
@@ -96,10 +115,10 @@ export default function ProcesadorLiquidaciones() {
   };
 
   const manejarCambioNumero = (campo: keyof LiquidacionViaje, valor: string) => {
-    const numero = parseFloat(valor) || 0;
+    const num = parseFloat(valor) || 0;
     setFormData(prev => ({
       ...prev,
-      [campo]: numero
+      [campo]: num
     }));
   };
 
@@ -125,13 +144,11 @@ export default function ProcesadorLiquidaciones() {
       const json = await respuesta.json();
       const datosExtraidos = json.datos;
 
-      // Mapeamos los datos detectados por el OCR al formulario
       setFormData(prev => {
         let nuevosPeajes = prev.peajes;
         let nuevoAcpm = prev.acpm;
         let nuevaPlaca = prev.placa;
 
-        // Si el OCR devolvió campos directos o simulados
         if (datosExtraidos?.campos) {
           if (datosExtraidos.campos.Total) nuevosPeajes = parseFloat(datosExtraidos.campos.Total) || nuevosPeajes;
           if (datosExtraidos.campos.Placa) nuevaPlaca = String(datosExtraidos.campos.Placa);
@@ -163,7 +180,7 @@ export default function ProcesadorLiquidaciones() {
       setTabActiva('gastos');
     } catch (error: any) {
       console.error(error);
-      setMensajeError('No se pudo conectar con el endpoint de Azure. Verifica que LogisticaBackend esté corriendo.');
+      setMensajeError('No se pudo conectar con el endpoint de Azure. Verifica que el backend esté en ejecución.');
     } finally {
       setCargandoOcr(false);
     }
@@ -177,9 +194,7 @@ export default function ProcesadorLiquidaciones() {
     try {
       const respuesta = await fetch(`${API_BASE_URL}/api/liquidaciones/guardar`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       });
 
@@ -188,7 +203,8 @@ export default function ProcesadorLiquidaciones() {
       }
 
       const resJson = await respuesta.json();
-      setMensajeExito(resJson.mensaje || 'Liquidación aprobada y almacenada en la base de datos PostgreSQL.');
+      setMensajeExito(resJson.mensaje || 'Liquidación aprobada y guardada exitosamente en PostgreSQL.');
+      setFormData(prev => ({ ...prev, estadoRevision: 'aprobado' }));
     } catch (error: any) {
       console.error(error);
       setMensajeError('Error al contactar la API para guardar la liquidación.');
@@ -206,596 +222,490 @@ export default function ProcesadorLiquidaciones() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between pb-6 border-b border-slate-200 mb-8 gap-4">
+    <div className="max-w-[1600px] mx-auto p-4 sm:p-6 text-slate-800">
+      
+      {/* Cabecera de Página con Tarjeta de Resumen */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between pb-6 mb-6 border-b border-slate-200/80 gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
             Digitalización de Liquidaciones de Viaje
-          </h1>
-          <p className="text-slate-500 text-sm mt-1">
-            Inspecciona visualmente el comprobante a la izquierda y revisa los campos autocompletados con Azure Form Recognizer a la derecha.
+          </h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Inspecciona el comprobante visualmente y aprueba los datos extraídos por Azure AI OCR.
           </p>
         </div>
 
-        {/* Resumen Superior Rápido */}
-        <div className="flex items-center gap-3 bg-white p-2.5 rounded-xl border border-slate-200 shadow-xs">
-          <div className="px-3 py-1 bg-slate-50 rounded-lg">
-            <span className="text-xs text-slate-500 font-medium block">Total Gastos</span>
-            <span className="text-sm font-bold text-slate-900 font-mono">{formatCOP(formData.totalGastos)}</span>
+        {/* Tarjeta de Resumen Rápida */}
+        <div className="flex bg-white rounded-xl shadow-xs border border-slate-200 p-1 self-start md:self-auto">
+          <div className="px-5 py-2 text-center border-r border-slate-100">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Total Gastos</p>
+            <p className="text-lg font-bold text-slate-800 font-mono">{formatCOP(formData.totalGastos)}</p>
           </div>
-          <div className="px-3 py-1 bg-blue-50 rounded-lg">
-            <span className="text-xs text-blue-600 font-medium block">Saldo Viaje</span>
-            <span className={`text-sm font-bold font-mono ${formData.saldoViaje >= 0 ? 'text-blue-700' : 'text-red-600'}`}>
+          <div className="px-5 py-2 text-center bg-blue-50/70 rounded-lg">
+            <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">Saldo Viaje</p>
+            <p className={`text-lg font-bold font-mono ${formData.saldoViaje >= 0 ? 'text-blue-700' : 'text-rose-600'}`}>
               {formatCOP(formData.saldoViaje)}
-            </span>
+            </p>
           </div>
         </div>
       </div>
 
-      {/* Alertas */}
+      {/* Alertas Dinámicas */}
       {mensajeExito && (
-        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl flex items-center gap-3">
+        <div className="mb-5 p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl flex items-center gap-3 shadow-2xs">
           <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
           <span className="text-sm font-medium">{mensajeExito}</span>
         </div>
       )}
 
       {mensajeError && (
-        <div className="mb-6 p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl flex items-center gap-3">
+        <div className="mb-5 p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl flex items-center gap-3 shadow-2xs">
           <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
           <span className="text-sm font-medium">{mensajeError}</span>
         </div>
       )}
 
-      {/* Layout de dos paneles */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      {/* Layout de 2 Columnas Principal */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-[640px] lg:h-[calc(100vh-210px)]">
         
-        {/* PANEL IZQUIERDO: Carga e Inspección Visual del Comprobante (5 Cols) */}
-        <div className="lg:col-span-5 bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-slate-900 flex items-center gap-2">
-              <Eye className="w-4 h-4 text-blue-600" />
+        {/* PANEL IZQUIERDO: Visor Mejorado de Soporte / Comprobante (5 Cols) */}
+        <div className="lg:col-span-5 bg-white rounded-2xl shadow-xs border border-slate-200 flex flex-col overflow-hidden">
+          
+          {/* Header del Panel Izquierdo */}
+          <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+            <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+              <UploadCloud className="w-4 h-4 text-blue-500" />
               Soporte / Comprobante
-            </h2>
-            {previewUrl && (
-              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
-                <button 
-                  onClick={() => setZoom(z => Math.max(0.6, z - 0.2))} 
-                  className="p-1 hover:bg-white rounded text-slate-700 transition" 
-                  title="Reducir Zoom"
-                >
-                  <ZoomOut className="w-4 h-4" />
-                </button>
-                <span className="text-xs font-mono font-semibold px-1 text-slate-600">
-                  {Math.round(zoom * 100)}%
-                </span>
-                <button 
-                  onClick={() => setZoom(z => Math.min(3, z + 0.2))} 
-                  className="p-1 hover:bg-white rounded text-slate-700 transition" 
-                  title="Aumentar Zoom"
-                >
-                  <ZoomIn className="w-4 h-4" />
-                </button>
-                <button 
-                  onClick={() => setRotacion(r => (r + 90) % 360)} 
-                  className="p-1 hover:bg-white rounded text-slate-700 transition" 
-                  title="Rotar 90°"
-                >
-                  <RotateCw className="w-4 h-4" />
-                </button>
-                <button 
-                  onClick={() => { setZoom(1); setRotacion(0); }} 
-                  className="p-1 hover:bg-white rounded text-slate-700 transition" 
-                  title="Restablecer"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                </button>
-              </div>
+            </h3>
+            {archivo && (
+              <span className="text-xs font-medium text-slate-500 truncate max-w-[200px]" title={archivo.name}>
+                {archivo.name}
+              </span>
             )}
           </div>
-
-          {/* Área de selección de archivo */}
-          <label className="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl p-4 text-center cursor-pointer bg-slate-50/50 hover:bg-blue-50/20 transition flex flex-col items-center justify-center">
-            <UploadCloud className="w-8 h-8 text-blue-600 mb-2" />
-            <span className="text-sm font-semibold text-slate-800">
-              {archivo ? archivo.name : 'Haz clic o arrastra el tiquete o planilla'}
-            </span>
-            <span className="text-xs text-slate-500 mt-1">
-              Soporta imágenes JPG, PNG o documentos PDF
-            </span>
+          
+          {/* Área Central: Drag & Drop o Visor con Zoom Flotante */}
+          <div className="flex-1 p-4 flex flex-col justify-center relative overflow-hidden bg-slate-50/30">
             <input 
+              ref={fileInputRef}
               type="file" 
               accept=".jpg,.jpeg,.png,.pdf" 
               onChange={manejarArchivo}
               className="hidden"
             />
-          </label>
 
-          {/* Visor con Zoom y Rotación */}
-          <div className="mt-4 border border-slate-200 rounded-xl overflow-hidden bg-slate-900/5 h-[480px] flex items-center justify-center relative">
-            {previewUrl ? (
-              <div className="w-full h-full overflow-auto flex items-center justify-center p-4">
-                <img 
-                  src={previewUrl} 
-                  alt="Comprobante para liquidación" 
-                  style={{
-                    transform: `scale(${zoom}) rotate(${rotacion}deg)`,
-                    transition: 'transform 0.15s ease-out'
-                  }}
-                  className="max-h-full max-w-full object-contain shadow-md rounded"
-                />
+            {!previewUrl ? (
+              // Estado Vacío: Drag & Drop Interactivo a Pantalla Completa
+              <div 
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl bg-slate-50 hover:bg-blue-50/40 transition-all flex flex-col items-center justify-center h-full cursor-pointer group p-8"
+              >
+                <div className="w-16 h-16 bg-white rounded-2xl shadow-xs border border-slate-200 flex items-center justify-center mb-4 group-hover:scale-110 group-hover:border-blue-400 transition-all">
+                  <UploadCloud className="w-8 h-8 text-blue-500" />
+                </div>
+                <p className="font-semibold text-slate-700 text-base">Arrastra el tiquete o planilla</p>
+                <p className="text-sm text-slate-500 mt-1">o haz clic para explorar tus archivos</p>
+                <span className="text-xs text-slate-400 mt-4 px-3 py-1 bg-slate-100 rounded-full">
+                  Soporta JPG, PNG y PDF
+                </span>
               </div>
             ) : (
-              <div className="text-center p-6 text-slate-400">
-                <FileText className="w-12 h-12 mx-auto stroke-[1.5] mb-2 opacity-50" />
-                <p className="text-sm font-medium">Ningún comprobante cargado</p>
-                <p className="text-xs mt-1 text-slate-400 max-w-xs">
-                  Carga una foto de un tiquete de peaje, recibo de ACPM o planilla de viaje para analizarla con Azure OCR.
-                </p>
+              // Visor Activo: Controles Flotantes Translúcidos (no empujan el diseño)
+              <div className="relative w-full h-full flex items-center justify-center bg-slate-900/5 rounded-xl border border-slate-200 overflow-hidden">
+                
+                {/* Botonera Flotante en la Esquina Superior Derecha */}
+                <div className="absolute top-3 right-3 z-10 bg-white/90 backdrop-blur-md border border-slate-200/90 shadow-md rounded-xl p-1 flex items-center gap-1">
+                  <button 
+                    onClick={() => setZoom(z => Math.max(0.6, z - 0.2))} 
+                    className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-700 transition" 
+                    title="Reducir Zoom"
+                  >
+                    <ZoomOut className="w-4 h-4" />
+                  </button>
+                  <span className="text-xs font-mono font-semibold px-1 text-slate-600 min-w-[40px] text-center">
+                    {Math.round(zoom * 100)}%
+                  </span>
+                  <button 
+                    onClick={() => setZoom(z => Math.min(3.5, z + 0.2))} 
+                    className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-700 transition" 
+                    title="Aumentar Zoom"
+                  >
+                    <ZoomIn className="w-4 h-4" />
+                  </button>
+                  <button 
+                    onClick={() => setRotacion(r => (r + 90) % 360)} 
+                    className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-700 transition" 
+                    title="Rotar 90°"
+                  >
+                    <RotateCw className="w-4 h-4" />
+                  </button>
+                  <button 
+                    onClick={() => { setZoom(1); setRotacion(0); }} 
+                    className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-700 transition" 
+                    title="Restablecer"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                  <div className="w-px h-4 bg-slate-200 mx-0.5"></div>
+                  <button 
+                    onClick={() => fileInputRef.current?.click()} 
+                    className="p-1.5 hover:bg-blue-50 text-blue-600 rounded-lg transition" 
+                    title="Cambiar comprobante"
+                  >
+                    <ImageIcon className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Imagen del Comprobante */}
+                <div className="w-full h-full overflow-auto flex items-center justify-center p-4">
+                  <img 
+                    src={previewUrl} 
+                    alt="Soporte o tiquete cargado" 
+                    style={{
+                      transform: `scale(${zoom}) rotate(${rotacion}deg)`,
+                      transition: 'transform 0.15s ease-out'
+                    }}
+                    className="max-h-full max-w-full object-contain shadow-sm rounded-lg"
+                  />
+                </div>
               </div>
             )}
           </div>
 
-          {/* Botón de Procesamiento con Azure */}
-          <button 
-            onClick={procesarImagen}
-            disabled={!archivo || cargandoOcr}
-            className="mt-4 w-full bg-blue-600 text-white py-3 px-4 rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 transition-all shadow-md shadow-blue-500/20 flex items-center justify-center gap-2"
-          >
-            {cargandoOcr ? (
-              <>
-                <RefreshCw className="w-5 h-5 animate-spin" />
-                <span>Analizando con Azure Form Recognizer...</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-5 h-5" />
-                <span>Procesar Documento con IA</span>
-              </>
-            )}
-          </button>
+          {/* Footer del Panel Izquierdo con Botón Primario de IA */}
+          <div className="p-4 bg-slate-50 border-t border-slate-100">
+            <button 
+              onClick={procesarImagen}
+              disabled={!archivo || cargandoOcr}
+              className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white font-semibold rounded-xl shadow-md hover:shadow-lg disabled:opacity-50 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              {cargandoOcr ? (
+                <>
+                  <RefreshCw className="w-5 h-5 animate-spin" />
+                  <span>Analizando con Azure Form Recognizer...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-5 h-5" />
+                  <span>Procesar Documento con IA</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
-        {/* PANEL DERECHO: Formulario Completo de Liquidación (7 Cols) */}
-        <div className="lg:col-span-7 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col">
+        {/* PANEL DERECHO: Formulario Compacto con Sticky Footer (7 Cols) */}
+        <div className="lg:col-span-7 bg-white rounded-2xl shadow-xs border border-slate-200 flex flex-col overflow-hidden relative">
           
-          {/* Pestañas de Navegación del Formulario */}
-          <div className="flex border-b border-slate-200 pb-3 mb-6 gap-2">
+          {/* Pestañas de Navegación Limpias */}
+          <div className="flex border-b border-slate-200 px-3 pt-2 bg-slate-50/50">
             <button
               onClick={() => setTabActiva('gastos')}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
+              className={`px-4 py-3 text-sm font-semibold transition-all border-b-2 ${
                 tabActiva === 'gastos'
-                  ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  ? 'text-blue-600 border-blue-600 bg-white/70 rounded-t-lg'
+                  : 'text-slate-500 border-transparent hover:text-slate-800'
               }`}
             >
               Gastos Operativos (16)
             </button>
             <button
               onClick={() => setTabActiva('viaje')}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
+              className={`px-4 py-3 text-sm font-semibold transition-all border-b-2 ${
                 tabActiva === 'viaje'
-                  ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  ? 'text-blue-600 border-blue-600 bg-white/70 rounded-t-lg'
+                  : 'text-slate-500 border-transparent hover:text-slate-800'
               }`}
             >
               Datos del Viaje
             </button>
             <button
               onClick={() => setTabActiva('totales')}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
+              className={`px-4 py-3 text-sm font-semibold transition-all border-b-2 ${
                 tabActiva === 'totales'
-                  ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  ? 'text-blue-600 border-blue-600 bg-white/70 rounded-t-lg'
+                  : 'text-slate-500 border-transparent hover:text-slate-800'
               }`}
             >
               Saldos y Totales
             </button>
           </div>
 
-          {/* CONTENIDO TAB 1: GASTOS OPERATIVOS (16 CAMPOS EXACTOS DE LA TABLA) */}
-          {tabActiva === 'gastos' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs uppercase font-bold tracking-wider text-slate-500">
-                  Desglose de Gastos en Ruta ($ COP)
-                </span>
-                <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded font-mono">
-                  Suma automática: {formatCOP(formData.totalGastos)}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {/* 1. Peajes */}
-                <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">1. Peajes</label>
-                  <input
-                    type="number"
-                    value={formData.peajes || ''}
-                    onChange={(e) => manejarCambioNumero('peajes', e.target.value)}
-                    placeholder="0"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
+          {/* Contenido con Scroll Interno (reserva espacio para el sticky footer) */}
+          <div className="flex-1 p-5 sm:p-6 overflow-y-auto pb-24">
+            
+            {/* TAB 1: GASTOS OPERATIVOS (16 INPUTS CON PREFIJO VISUAL '$') */}
+            {tabActiva === 'gastos' && (
+              <div>
+                <div className="flex items-center justify-between mb-5">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                    Desglose de Gastos en Ruta
+                  </h4>
+                  <div className="flex items-center gap-1.5 text-xs text-blue-600 font-medium bg-blue-50 px-2.5 py-1 rounded-md">
+                    <Calculator className="w-3.5 h-3.5" />
+                    Suma automática: {formatCOP(formData.totalGastos)}
+                  </div>
                 </div>
 
-                {/* 2. ACPM */}
-                <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">2. ACPM</label>
-                  <input
-                    type="number"
-                    value={formData.acpm || ''}
-                    onChange={(e) => manejarCambioNumero('acpm', e.target.value)}
-                    placeholder="0"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                {/* 3. Parqueo */}
-                <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">3. Parqueo</label>
-                  <input
-                    type="number"
-                    value={formData.parqueo || ''}
-                    onChange={(e) => manejarCambioNumero('parqueo', e.target.value)}
-                    placeholder="0"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                {/* 4. Comisión */}
-                <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">4. Comisión</label>
-                  <input
-                    type="number"
-                    value={formData.comision || ''}
-                    onChange={(e) => manejarCambioNumero('comision', e.target.value)}
-                    placeholder="0"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                {/* 5. Porcentaje */}
-                <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">5. Porcentaje</label>
-                  <input
-                    type="number"
-                    value={formData.porcentaje || ''}
-                    onChange={(e) => manejarCambioNumero('porcentaje', e.target.value)}
-                    placeholder="0"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                {/* 6. Engrase */}
-                <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">6. Engrase</label>
-                  <input
-                    type="number"
-                    value={formData.engrase || ''}
-                    onChange={(e) => manejarCambioNumero('engrase', e.target.value)}
-                    placeholder="0"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                {/* 7. Tensionada */}
-                <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">7. Tensionada</label>
-                  <input
-                    type="number"
-                    value={formData.tensionada || ''}
-                    onChange={(e) => manejarCambioNumero('tensionada', e.target.value)}
-                    placeholder="0"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                {/* 8. Aseo */}
-                <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">8. Aseo</label>
-                  <input
-                    type="number"
-                    value={formData.aseo || ''}
-                    onChange={(e) => manejarCambioNumero('aseo', e.target.value)}
-                    placeholder="0"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                {/* 9. Llantas */}
-                <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">9. Llantas</label>
-                  <input
-                    type="number"
-                    value={formData.llantas || ''}
-                    onChange={(e) => manejarCambioNumero('llantas', e.target.value)}
-                    placeholder="0"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                {/* 10. Urea */}
-                <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">10. Urea</label>
-                  <input
-                    type="number"
-                    value={formData.urea || ''}
-                    onChange={(e) => manejarCambioNumero('urea', e.target.value)}
-                    placeholder="0"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                {/* 11. Cargue */}
-                <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">11. Cargue</label>
-                  <input
-                    type="number"
-                    value={formData.cargue || ''}
-                    onChange={(e) => manejarCambioNumero('cargue', e.target.value)}
-                    placeholder="0"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                {/* 12. Descargue */}
-                <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">12. Descargue</label>
-                  <input
-                    type="number"
-                    value={formData.descargue || ''}
-                    onChange={(e) => manejarCambioNumero('descargue', e.target.value)}
-                    placeholder="0"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                {/* 13. Carrosada */}
-                <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">13. Carrosada</label>
-                  <input
-                    type="number"
-                    value={formData.carrosada || ''}
-                    onChange={(e) => manejarCambioNumero('carrosada', e.target.value)}
-                    placeholder="0"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                {/* 14. Descarrosada */}
-                <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">14. Descarrosada</label>
-                  <input
-                    type="number"
-                    value={formData.descarrosada || ''}
-                    onChange={(e) => manejarCambioNumero('descarrosada', e.target.value)}
-                    placeholder="0"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                {/* 15. Papelería */}
-                <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">15. Papelería</label>
-                  <input
-                    type="number"
-                    value={formData.papeleria || ''}
-                    onChange={(e) => manejarCambioNumero('papeleria', e.target.value)}
-                    placeholder="0"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                {/* 16. Otros */}
-                <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">16. Otros Gastos</label>
-                  <input
-                    type="number"
-                    value={formData.otros || ''}
-                    onChange={(e) => manejarCambioNumero('otros', e.target.value)}
-                    placeholder="0"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-x-5 gap-y-4">
+                  {GASTOS_OPERATIVOS.map((item) => (
+                    <div key={item.campo}>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                        {item.label}
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <span className="text-slate-400 text-sm">$</span>
+                        </div>
+                        <input 
+                          type="number"
+                          placeholder="0"
+                          value={formData[item.campo] ? (formData[item.campo] as number) : ''}
+                          onChange={(e) => manejarCambioNumero(item.campo, e.target.value)}
+                          className="pl-7 pr-3 block w-full rounded-lg bg-slate-50 border border-slate-200/70 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-sm font-mono py-2 transition-all shadow-2xs focus:outline-none" 
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* CONTENIDO TAB 2: DATOS DEL VIAJE */}
-          {tabActiva === 'viaje' && (
-            <div className="space-y-4">
-              <span className="text-xs uppercase font-bold tracking-wider text-slate-500 block">
-                Información de Conductor, Vehículo y Ruta
-              </span>
+            {/* TAB 2: DATOS DEL VIAJE */}
+            {tabActiva === 'viaje' && (
+              <div>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-5">
+                  Vehículo, Conductor y Ruta
+                </h4>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Placa del Vehículo</label>
-                  <div className="relative">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                      Placa del Vehículo
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={formData.placa}
+                        onChange={(e) => manejarCambioTexto('placa', e.target.value.toUpperCase())}
+                        placeholder="Ej. WCN452"
+                        className="block w-full uppercase font-mono font-bold tracking-wider rounded-lg bg-slate-50 border border-slate-200/70 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-sm py-2 px-3 transition-all shadow-2xs focus:outline-none"
+                      />
+                      <Truck className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                      Nombre Conductor
+                    </label>
                     <input
                       type="text"
-                      value={formData.placa}
-                      onChange={(e) => manejarCambioTexto('placa', e.target.value.toUpperCase())}
-                      placeholder="Ej. WCN452"
-                      className="w-full uppercase font-mono font-bold tracking-wider border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      value={formData.conductor}
+                      onChange={(e) => manejarCambioTexto('conductor', e.target.value)}
+                      placeholder="Nombre completo"
+                      className="block w-full rounded-lg bg-slate-50 border border-slate-200/70 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-sm py-2 px-3 transition-all shadow-2xs focus:outline-none"
                     />
-                    <Truck className="w-4 h-4 text-slate-400 absolute right-3 top-2.5" />
                   </div>
-                </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Nombre Conductor</label>
-                  <input
-                    type="text"
-                    value={formData.conductor}
-                    onChange={(e) => manejarCambioTexto('conductor', e.target.value)}
-                    placeholder="Nombre completo"
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                      Fecha Inicial
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="date"
+                        value={formData.fechaInicial}
+                        onChange={(e) => manejarCambioTexto('fechaInicial', e.target.value)}
+                        className="block w-full rounded-lg bg-slate-50 border border-slate-200/70 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-sm py-2 px-3 transition-all shadow-2xs focus:outline-none"
+                      />
+                      <Calendar className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
+                    </div>
+                  </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Fecha Inicial</label>
-                  <div className="relative">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                      Fecha Final
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="date"
+                        value={formData.fechaFinal}
+                        onChange={(e) => manejarCambioTexto('fechaFinal', e.target.value)}
+                        className="block w-full rounded-lg bg-slate-50 border border-slate-200/70 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-sm py-2 px-3 transition-all shadow-2xs focus:outline-none"
+                      />
+                      <Calendar className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                      N° Manifiesto
+                    </label>
                     <input
-                      type="date"
-                      value={formData.fechaInicial}
-                      onChange={(e) => manejarCambioTexto('fechaInicial', e.target.value)}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      type="text"
+                      value={formData.manifiesto}
+                      onChange={(e) => manejarCambioTexto('manifiesto', e.target.value)}
+                      placeholder="Ej. MAN-98201"
+                      className="block w-full rounded-lg bg-slate-50 border border-slate-200/70 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-sm py-2 px-3 transition-all shadow-2xs focus:outline-none"
                     />
-                    <Calendar className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
                   </div>
-                </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Fecha Final</label>
-                  <div className="relative">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                      Empresa Transportadora
+                    </label>
                     <input
-                      type="date"
-                      value={formData.fechaFinal}
-                      onChange={(e) => manejarCambioTexto('fechaFinal', e.target.value)}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      type="text"
+                      value={formData.empresaTransportadora}
+                      onChange={(e) => manejarCambioTexto('empresaTransportadora', e.target.value)}
+                      placeholder="Empresa asignada"
+                      className="block w-full rounded-lg bg-slate-50 border border-slate-200/70 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-sm py-2 px-3 transition-all shadow-2xs focus:outline-none"
                     />
-                    <Calendar className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
                   </div>
-                </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">N° Manifiesto</label>
-                  <input
-                    type="text"
-                    value={formData.manifiesto}
-                    onChange={(e) => manejarCambioTexto('manifiesto', e.target.value)}
-                    placeholder="Ej. MAN-8921"
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                      Origen del Viaje
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.origenViaje}
+                      onChange={(e) => manejarCambioTexto('origenViaje', e.target.value)}
+                      placeholder="Ciudad origen"
+                      className="block w-full rounded-lg bg-slate-50 border border-slate-200/70 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-sm py-2 px-3 transition-all shadow-2xs focus:outline-none"
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Empresa Transportadora</label>
-                  <input
-                    type="text"
-                    value={formData.empresaTransportadora}
-                    onChange={(e) => manejarCambioTexto('empresaTransportadora', e.target.value)}
-                    placeholder="Empresa contratante"
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Origen del Viaje</label>
-                  <input
-                    type="text"
-                    value={formData.origenViaje}
-                    onChange={(e) => manejarCambioTexto('origenViaje', e.target.value)}
-                    placeholder="Ciudad o puerto origen"
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Destino</label>
-                  <input
-                    type="text"
-                    value={formData.destino}
-                    onChange={(e) => manejarCambioTexto('destino', e.target.value)}
-                    placeholder="Ciudad de entrega"
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                      Destino
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.destino}
+                      onChange={(e) => manejarCambioTexto('destino', e.target.value)}
+                      placeholder="Ciudad destino"
+                      className="block w-full rounded-lg bg-slate-50 border border-slate-200/70 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-sm py-2 px-3 transition-all shadow-2xs focus:outline-none"
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* CONTENIDO TAB 3: SALDOS Y TOTALES */}
-          {tabActiva === 'totales' && (
-            <div className="space-y-4">
-              <span className="text-xs uppercase font-bold tracking-wider text-slate-500 block">
-                Cálculo de Anticipos y Saldos Financieros
+            {/* TAB 3: SALDOS Y TOTALES */}
+            {tabActiva === 'totales' && (
+              <div>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-5">
+                  Anticipos y Liquidación Final
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80">
+                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">
+                      Total Gastos (16 Rubros)
+                    </label>
+                    <div className="text-xl font-mono font-bold text-slate-900">
+                      {formatCOP(formData.totalGastos)}
+                    </div>
+                    <span className="text-xs text-slate-400">Sumado automáticamente</span>
+                  </div>
+
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80">
+                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">
+                      Traslado (Anticipo)
+                    </label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 text-sm">$</span>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={formData.traslado || ''}
+                        onChange={(e) => manejarCambioNumero('traslado', e.target.value)}
+                        className="pl-7 pr-3 block w-full rounded-lg bg-white border border-slate-200 text-sm font-mono font-semibold py-2 focus:ring-2 focus:ring-blue-100 focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80">
+                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">
+                      Básico del Viaje
+                    </label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 text-sm">$</span>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={formData.basico || ''}
+                        onChange={(e) => manejarCambioNumero('basico', e.target.value)}
+                        className="pl-7 pr-3 block w-full rounded-lg bg-white border border-slate-200 text-sm font-mono font-semibold py-2 focus:ring-2 focus:ring-blue-100 focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80">
+                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">
+                      Saldo Anterior
+                    </label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 text-sm">$</span>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={formData.saldoAnterior || ''}
+                        onChange={(e) => manejarCambioNumero('saldoAnterior', e.target.value)}
+                        className="pl-7 pr-3 block w-full rounded-lg bg-white border border-slate-200 text-sm font-mono font-semibold py-2 focus:ring-2 focus:ring-blue-100 focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/50">
+                    <label className="block text-xs font-semibold text-blue-900 uppercase mb-1">
+                      Saldo del Viaje
+                    </label>
+                    <div className={`text-xl font-mono font-bold ${formData.saldoViaje >= 0 ? 'text-blue-700' : 'text-rose-600'}`}>
+                      {formatCOP(formData.saldoViaje)}
+                    </div>
+                    <span className="text-xs text-blue-600 font-medium">Traslado + Básico - Total Gastos</span>
+                  </div>
+
+                  <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/50">
+                    <label className="block text-xs font-semibold text-emerald-900 uppercase mb-1">
+                      Saldo Total Definitivo
+                    </label>
+                    <div className={`text-xl font-mono font-bold ${formData.saldoTotal >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                      {formatCOP(formData.saldoTotal)}
+                    </div>
+                    <span className="text-xs text-emerald-600 font-medium">Saldo Viaje + Saldo Anterior</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          </div>
+
+          {/* Sticky Footer: Estado + Botón de Aprobación */}
+          <div className="absolute bottom-0 left-0 right-0 p-4 bg-white/95 backdrop-blur-md border-t border-slate-200 flex items-center justify-between z-10 shadow-xs">
+            <div className="flex items-center gap-2">
+              <div className={`w-2.5 h-2.5 rounded-full ${formData.estadoRevision === 'aprobado' ? 'bg-emerald-500' : 'bg-amber-500'}`}></div>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                Estado: {formData.estadoRevision.toUpperCase()}
               </span>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Total Gastos (Suma 16 Rubros)</label>
-                  <div className="text-lg font-mono font-bold text-slate-900">
-                    {formatCOP(formData.totalGastos)}
-                  </div>
-                  <span className="text-xs text-slate-400">Calculado automáticamente</span>
-                </div>
-
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Traslado (Anticipo)</label>
-                  <input
-                    type="number"
-                    value={formData.traslado || ''}
-                    onChange={(e) => manejarCambioNumero('traslado', e.target.value)}
-                    placeholder="0"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Básico del Viaje</label>
-                  <input
-                    type="number"
-                    value={formData.basico || ''}
-                    onChange={(e) => manejarCambioNumero('basico', e.target.value)}
-                    placeholder="0"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Saldo Anterior</label>
-                  <input
-                    type="number"
-                    value={formData.saldoAnterior || ''}
-                    onChange={(e) => manejarCambioNumero('saldoAnterior', e.target.value)}
-                    placeholder="0"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/60">
-                  <label className="block text-xs font-semibold text-blue-900 mb-1">Saldo del Viaje</label>
-                  <div className={`text-xl font-mono font-bold ${formData.saldoViaje >= 0 ? 'text-blue-700' : 'text-rose-600'}`}>
-                    {formatCOP(formData.saldoViaje)}
-                  </div>
-                  <span className="text-xs text-blue-600">Traslado + Básico - Total Gastos</span>
-                </div>
-
-                <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/60">
-                  <label className="block text-xs font-semibold text-emerald-900 mb-1">Saldo Total Definitivo</label>
-                  <div className={`text-xl font-mono font-bold ${formData.saldoTotal >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
-                    {formatCOP(formData.saldoTotal)}
-                  </div>
-                  <span className="text-xs text-emerald-600">Saldo Viaje + Saldo Anterior</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Botón de Aprobación y Guardado en Base de Datos */}
-          <div className="pt-6 mt-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
-              <span>Estado: <strong>{formData.estadoRevision.toUpperCase()}</strong></span>
             </div>
 
             <button
               onClick={guardarEnBaseDatos}
               disabled={guardando || !formData.placa}
-              className="w-full sm:w-auto px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold transition-all shadow-md shadow-emerald-600/20 disabled:opacity-50 flex items-center justify-center gap-2"
+              className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-xs hover:shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
             >
               {guardando ? (
                 <>
-                  <RefreshCw className="w-5 h-5 animate-spin" />
-                  <span>Guardando en PostgreSQL...</span>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Guardando...</span>
                 </>
               ) : (
                 <>
-                  <Save className="w-5 h-5" />
+                  <CheckCircle2 className="w-4 h-4" />
                   <span>Aprobar y Guardar en Base de Datos</span>
                 </>
               )}
