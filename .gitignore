@@ -7,6 +7,10 @@
 .env
 
 # User-specific files
+# Configuration files / Secrets
+appsettings*.json
+!appsettings.example.json
+
 *.rsuser
 *.suo
 *.user
