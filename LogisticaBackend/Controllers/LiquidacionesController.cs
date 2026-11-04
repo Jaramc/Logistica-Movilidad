@@ -12,14 +12,14 @@ namespace TuProyecto.API.Controllers;
 public class LiquidacionesController : ControllerBase
 {
     private readonly IOcrAzureService _ocrService;
-    private readonly AppDbContext? _context;
+    private readonly AppDbContext _context;
     private readonly ILogger<LiquidacionesController> _logger;
 
-    // Inyectamos el servicio de Azure y el contexto de base de datos
+    // Inyectamos el servicio de Azure, el contexto de base de datos obligatorio y logger
     public LiquidacionesController(
         IOcrAzureService ocrService, 
         ILogger<LiquidacionesController> logger,
-        AppDbContext? context = null)
+        AppDbContext context)
     {
         _ocrService = ocrService;
         _logger = logger;
@@ -27,33 +27,48 @@ public class LiquidacionesController : ControllerBase
     }
 
     [HttpPost("extraer-datos")]
-    public async Task<IActionResult> ExtraerDatosLiquidacion(IFormFile imagen)
+    public async Task<IActionResult> ExtraerDatosLiquidacion(IFormFile? imagen)
     {
-        // 1. Validaciones básicas
+        // 1. Validación básica de presencia
         if (imagen == null || imagen.Length == 0)
         {
-            return BadRequest(new { mensaje = "No se proporcionó ninguna imagen." });
+            return BadRequest(new { mensaje = "No se proporcionó ningún archivo." });
         }
 
+        // Validación estricta de tamaño máximo: 10 MB (10 * 1024 * 1024)
+        const long maximoTamanoBytes = 10 * 1024 * 1024;
+        if (imagen.Length > maximoTamanoBytes)
+        {
+            return BadRequest(new { mensaje = "El archivo excede el tamaño máximo permitido de 10 MB." });
+        }
+
+        // Validación estricta de ContentType (MIME type)
+        var mimeTypesValidos = new[] { "image/jpeg", "image/png", "application/pdf" };
+        var contentType = imagen.ContentType?.ToLowerInvariant() ?? string.Empty;
+        if (!mimeTypesValidos.Contains(contentType))
+        {
+            return BadRequest(new { mensaje = "Formato de archivo no permitido. Solo se aceptan tipos MIME: image/jpeg, image/png y application/pdf." });
+        }
+
+        // Validación de extensión de archivo
         var extensionesValidas = new[] { ".jpg", ".jpeg", ".png", ".pdf" };
-        var extension = Path.GetExtension(imagen.FileName).ToLower();
-        
+        var extension = Path.GetExtension(imagen.FileName).ToLowerInvariant();
         if (!extensionesValidas.Contains(extension))
         {
-            return BadRequest(new { mensaje = "Formato de archivo no soportado. Usa JPG, PNG o PDF." });
+            return BadRequest(new { mensaje = "Extensión de archivo no soportada. Usa JPG, PNG o PDF." });
         }
 
         try
         {
-            // 2. Procesamos el archivo sin guardarlo físicamente en el disco
+            // 2. Procesamos el archivo en memoria como Stream sin escribir en disco
             using var stream = imagen.OpenReadStream();
             
-            // Usamos "prebuilt-receipt" para los tiquetes, o el ID de tu modelo personalizado para la planilla
+            // Usamos "prebuilt-receipt" para los tiquetes/recibos
             string modelId = "prebuilt-receipt"; 
             
             var resultado = await _ocrService.ProcesarDocumentoAsync(stream, modelId);
 
-            // 3. Devolvemos los datos al frontend (React) para que la encargada los revise
+            // 3. Devolvemos los datos al frontend (React) para revisión y autocalculado
             return Ok(new 
             { 
                 mensaje = "Datos extraídos correctamente", 
@@ -62,8 +77,8 @@ public class LiquidacionesController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al procesar la imagen con Azure.");
-            return StatusCode(500, new { mensaje = "Error al procesar la imagen con Azure", error = ex.Message });
+            _logger.LogError(ex, "Error al procesar el archivo con Azure Form Recognizer.");
+            return StatusCode(500, new { mensaje = "Error al procesar el archivo con Azure", error = ex.Message });
         }
     }
 
@@ -81,26 +96,18 @@ public class LiquidacionesController : ControllerBase
             liquidacion.CreadoEn = DateTime.UtcNow;
             liquidacion.ActualizadoEn = DateTime.UtcNow;
 
-            if (_context != null)
-            {
-                await _context.LiquidacionesViaje.AddAsync(liquidacion);
-                await _context.SaveChangesAsync();
-                return Ok(new 
-                { 
-                    mensaje = "Liquidación aprobada y guardada exitosamente en la base de datos.", 
-                    id = liquidacion.Id 
-                });
-            }
+            await _context.LiquidacionesViaje.AddAsync(liquidacion);
+            await _context.SaveChangesAsync();
 
             return Ok(new 
             { 
-                mensaje = "Liquidación aprobada correctamente (DbContext no conectado).", 
-                datos = liquidacion 
+                mensaje = "Liquidación aprobada y guardada exitosamente en la base de datos.", 
+                id = liquidacion.Id 
             });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al guardar la liquidación.");
+            _logger.LogError(ex, "Error al guardar la liquidación en la base de datos.");
             return StatusCode(500, new { mensaje = "Error al guardar en PostgreSQL", error = ex.Message });
         }
     }
@@ -108,12 +115,8 @@ public class LiquidacionesController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> ObtenerLiquidaciones()
     {
-        if (_context == null)
-        {
-            return Ok(new List<LiquidacionViaje>());
-        }
-
         var lista = await _context.LiquidacionesViaje
+            .AsNoTracking()
             .OrderByDescending(x => x.CreadoEn)
             .Take(50)
             .ToListAsync();
@@ -126,13 +129,11 @@ public class LiquidacionesController : ControllerBase
     {
         try
         {
-            List<LiquidacionViaje> liquidaciones = new();
-            if (_context != null)
-            {
-                liquidaciones = await _context.LiquidacionesViaje
-                    .OrderByDescending(x => x.FechaInicial)
-                    .ToListAsync();
-            }
+            // AsNoTracking para optimizar memoria en consultas de solo lectura
+            var liquidaciones = await _context.LiquidacionesViaje
+                .AsNoTracking()
+                .OrderByDescending(x => x.FechaInicial)
+                .ToListAsync();
 
             using var workbook = new XLWorkbook();
             var worksheet = workbook.Worksheets.Add("Consolidado Liquidaciones");

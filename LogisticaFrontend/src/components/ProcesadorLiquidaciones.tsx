@@ -54,8 +54,8 @@ export default function ProcesadorLiquidaciones() {
   const [formData, setFormData] = useState<LiquidacionViaje>(VALORES_INICIALES_LIQUIDACION);
   const [tabActiva, setTabActiva] = useState<'gastos' | 'viaje' | 'totales'>('gastos');
 
-  // Suma automática de los 16 rubros de gastos
-  const sumaGastosCalculada = useMemo(() => {
+  // Cálculo en tiempo real de los 16 rubros de gastos (sin setState ni re-renders redundantes)
+  const totalGastosCalculado = useMemo(() => {
     return (
       (formData.peajes || 0) +
       (formData.porcentaje || 0) +
@@ -81,23 +81,31 @@ export default function ProcesadorLiquidaciones() {
     formData.carrosada, formData.descarrosada, formData.papeleria, formData.otros
   ]);
 
-  // Actualizar totales y saldos automáticamente
+  // Saldos calculados al vuelo
+  const saldoViajeCalculado = useMemo(() => {
+    return (formData.traslado || 0) + (formData.basico || 0) - totalGastosCalculado;
+  }, [formData.traslado, formData.basico, totalGastosCalculado]);
+
+  const saldoTotalCalculado = useMemo(() => {
+    return saldoViajeCalculado + (formData.saldoAnterior || 0);
+  }, [saldoViajeCalculado, formData.saldoAnterior]);
+
+  // Liberación de memoria al desmontar
   useEffect(() => {
-    setFormData(prev => {
-      const saldoViajeCalculado = (prev.traslado || 0) + (prev.basico || 0) - sumaGastosCalculada;
-      const saldoTotalCalculado = saldoViajeCalculado + (prev.saldoAnterior || 0);
-      return {
-        ...prev,
-        totalGastos: sumaGastosCalculada,
-        saldoViaje: saldoViajeCalculado,
-        saldoTotal: saldoTotalCalculado
-      };
-    });
-  }, [sumaGastosCalculada, formData.traslado, formData.basico, formData.saldoAnterior]);
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
 
   const manejarArchivo = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Liberación de URL de blob previa para evitar fugas de memoria
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
       setArchivo(file);
       setPreviewUrl(URL.createObjectURL(file));
       setZoom(1);
@@ -145,33 +153,47 @@ export default function ProcesadorLiquidaciones() {
       const datosExtraidos = json.datos;
 
       setFormData(prev => {
-        let nuevosPeajes = prev.peajes;
-        let nuevoAcpm = prev.acpm;
-        let nuevaPlaca = prev.placa;
+        let nuevosPeajes = 0;
+        let nuevoAcpm = 0;
+        let nuevaPlaca = '';
 
         if (datosExtraidos?.campos) {
-          if (datosExtraidos.campos.Total) nuevosPeajes = parseFloat(datosExtraidos.campos.Total) || nuevosPeajes;
-          if (datosExtraidos.campos.Placa) nuevaPlaca = String(datosExtraidos.campos.Placa);
+          if (datosExtraidos.campos.Total) {
+            const rawVal = String(datosExtraidos.campos.Total).replace(/[^0-9.-]+/g, '');
+            nuevosPeajes = parseFloat(rawVal) || 0;
+          }
+          if (datosExtraidos.campos.Placa) {
+            nuevaPlaca = String(datosExtraidos.campos.Placa);
+          }
         } else if (datosExtraidos?.documentos?.[0]) {
           const doc = datosExtraidos.documentos[0];
-          if (doc.Total) nuevosPeajes = parseFloat(doc.Total.replace(/[^0-9.-]+/g, '')) || nuevosPeajes;
-          if (doc.Placa) nuevaPlaca = doc.Placa;
-          if (doc.ACPM || doc.Combustible) nuevoAcpm = parseFloat(doc.ACPM || doc.Combustible) || nuevoAcpm;
+          if (doc.Total) {
+            const rawVal = String(doc.Total).replace(/[^0-9.-]+/g, '');
+            nuevosPeajes = parseFloat(rawVal) || 0;
+          }
+          if (doc.Placa) {
+            nuevaPlaca = String(doc.Placa);
+          }
+          if (doc.ACPM || doc.Combustible) {
+            const rawAcpm = String(doc.ACPM || doc.Combustible).replace(/[^0-9.-]+/g, '');
+            nuevoAcpm = parseFloat(rawAcpm) || 0;
+          }
         }
 
+        // Cero valores quemados/fallback: si Azure no extrae un dato, queda vacío o en 0
         return {
           ...prev,
-          placa: nuevaPlaca || prev.placa || 'WCN-452',
-          conductor: prev.conductor || 'Juan Carlos Morales',
-          empresaTransportadora: prev.empresaTransportadora || 'Transportes del Caribe S.A.S',
-          origenViaje: prev.origenViaje || 'Buenaventura',
-          destino: prev.destino || 'Medellín',
-          peajes: nuevosPeajes > 0 ? nuevosPeajes : 142000,
-          acpm: nuevoAcpm > 0 ? nuevoAcpm : 350000,
-          parqueo: prev.parqueo > 0 ? prev.parqueo : 25000,
-          comision: prev.comision > 0 ? prev.comision : 45000,
-          traslado: prev.traslado > 0 ? prev.traslado : 850000,
-          basico: prev.basico > 0 ? prev.basico : 200000,
+          placa: nuevaPlaca || prev.placa || '',
+          conductor: prev.conductor || '',
+          empresaTransportadora: prev.empresaTransportadora || '',
+          origenViaje: prev.origenViaje || '',
+          destino: prev.destino || '',
+          peajes: nuevosPeajes > 0 ? nuevosPeajes : (prev.peajes || 0),
+          acpm: nuevoAcpm > 0 ? nuevoAcpm : (prev.acpm || 0),
+          parqueo: prev.parqueo || 0,
+          comision: prev.comision || 0,
+          traslado: prev.traslado || 0,
+          basico: prev.basico || 0,
           jsonOcrCrudo: JSON.stringify(datosExtraidos)
         };
       });
@@ -191,11 +213,19 @@ export default function ProcesadorLiquidaciones() {
     setMensajeError(null);
     setMensajeExito(null);
 
+    const payload: LiquidacionViaje = {
+      ...formData,
+      totalGastos: totalGastosCalculado,
+      saldoViaje: saldoViajeCalculado,
+      saldoTotal: saldoTotalCalculado,
+      estadoRevision: 'aprobado'
+    };
+
     try {
       const respuesta = await fetch(`${API_BASE_URL}/api/liquidaciones/guardar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       });
 
       if (!respuesta.ok) {
@@ -239,12 +269,12 @@ export default function ProcesadorLiquidaciones() {
         <div className="flex bg-white rounded-xl shadow-xs border border-slate-200 p-1 self-start md:self-auto">
           <div className="px-5 py-2 text-center border-r border-slate-100">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Total Gastos</p>
-            <p className="text-lg font-bold text-slate-800 font-mono">{formatCOP(formData.totalGastos)}</p>
+            <p className="text-lg font-bold text-slate-800 font-mono">{formatCOP(totalGastosCalculado)}</p>
           </div>
           <div className="px-5 py-2 text-center bg-blue-50/70 rounded-lg">
             <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">Saldo Viaje</p>
-            <p className={`text-lg font-bold font-mono ${formData.saldoViaje >= 0 ? 'text-blue-700' : 'text-rose-600'}`}>
-              {formatCOP(formData.saldoViaje)}
+            <p className={`text-lg font-bold font-mono ${saldoViajeCalculado >= 0 ? 'text-blue-700' : 'text-rose-600'}`}>
+              {formatCOP(saldoViajeCalculado)}
             </p>
           </div>
         </div>
@@ -443,7 +473,7 @@ export default function ProcesadorLiquidaciones() {
                   </h4>
                   <div className="flex items-center gap-1.5 text-xs text-blue-600 font-medium bg-blue-50 px-2.5 py-1 rounded-md">
                     <Calculator className="w-3.5 h-3.5" />
-                    Suma automática: {formatCOP(formData.totalGastos)}
+                    Suma automática: {formatCOP(totalGastosCalculado)}
                   </div>
                 </div>
 
@@ -606,7 +636,7 @@ export default function ProcesadorLiquidaciones() {
                       Total Gastos (16 Rubros)
                     </label>
                     <div className="text-xl font-mono font-bold text-slate-900">
-                      {formatCOP(formData.totalGastos)}
+                      {formatCOP(totalGastosCalculado)}
                     </div>
                     <span className="text-xs text-slate-400">Sumado automáticamente</span>
                   </div>
@@ -663,8 +693,8 @@ export default function ProcesadorLiquidaciones() {
                     <label className="block text-xs font-semibold text-blue-900 uppercase mb-1">
                       Saldo del Viaje
                     </label>
-                    <div className={`text-xl font-mono font-bold ${formData.saldoViaje >= 0 ? 'text-blue-700' : 'text-rose-600'}`}>
-                      {formatCOP(formData.saldoViaje)}
+                    <div className={`text-xl font-mono font-bold ${saldoViajeCalculado >= 0 ? 'text-blue-700' : 'text-rose-600'}`}>
+                      {formatCOP(saldoViajeCalculado)}
                     </div>
                     <span className="text-xs text-blue-600 font-medium">Traslado + Básico - Total Gastos</span>
                   </div>
@@ -673,8 +703,8 @@ export default function ProcesadorLiquidaciones() {
                     <label className="block text-xs font-semibold text-emerald-900 uppercase mb-1">
                       Saldo Total Definitivo
                     </label>
-                    <div className={`text-xl font-mono font-bold ${formData.saldoTotal >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
-                      {formatCOP(formData.saldoTotal)}
+                    <div className={`text-xl font-mono font-bold ${saldoTotalCalculado >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                      {formatCOP(saldoTotalCalculado)}
                     </div>
                     <span className="text-xs text-emerald-600 font-medium">Saldo Viaje + Saldo Anterior</span>
                   </div>

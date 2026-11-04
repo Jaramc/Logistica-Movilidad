@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using LogisticaBackend.Data;
 using LogisticaBackend.Interfaces;
 using LogisticaBackend.Services;
+using Azure;
+using Azure.AI.FormRecognizer.DocumentAnalysis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -9,13 +11,15 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
-// 2. Configurar PostgreSQL con Entity Framework Core
+// 2. Configurar PostgreSQL con Entity Framework Core (Falla rápida si la conexión no está configurada)
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-if (!string.IsNullOrEmpty(connectionString))
+if (string.IsNullOrWhiteSpace(connectionString))
 {
-    builder.Services.AddDbContext<AppDbContext>(options =>
-        options.UseNpgsql(connectionString));
+    throw new InvalidOperationException("La cadena de conexión 'DefaultConnection' no está configurada en appsettings.json o variables de entorno.");
 }
+
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(connectionString));
 
 // 3. Configuración CORS para el frontend (React / Vite)
 builder.Services.AddCors(options =>
@@ -28,7 +32,22 @@ builder.Services.AddCors(options =>
     });
 });
 
-// 4. Inyección de dependencias para el servicio OCR de Azure
+// 4. Inyección de dependencias para el cliente y servicio OCR de Azure
+// Registro Singleton de DocumentAnalysisClient para reutilizar conexiones HTTP y evitar agotamiento de sockets
+builder.Services.AddSingleton(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var endpoint = config["Azure:FormRecognizer:Endpoint"];
+    var apiKey = config["Azure:FormRecognizer:ApiKey"];
+
+    if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(apiKey))
+    {
+        throw new InvalidOperationException("Las credenciales de Azure Form Recognizer ('Azure:FormRecognizer:Endpoint' y 'Azure:FormRecognizer:ApiKey') no están configuradas.");
+    }
+
+    return new DocumentAnalysisClient(new Uri(endpoint), new AzureKeyCredential(apiKey));
+});
+
 builder.Services.AddScoped<IOcrAzureService, OcrAzureService>();
 builder.Services.AddScoped<TuProyecto.Application.Interfaces.IOcrAzureService, OcrAzureService>();
 
