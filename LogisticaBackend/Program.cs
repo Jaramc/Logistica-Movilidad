@@ -7,19 +7,18 @@ using Azure.AI.FormRecognizer.DocumentAnalysis;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Agregar servicios de Controladores y OpenAPI
+// 1. Agregar servicios de Controladores, OpenAPI y Swagger
 builder.Services.AddControllers();
-builder.Services.AddOpenApi();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
-// 2. Configurar PostgreSQL con Entity Framework Core (Falla rápida si la conexión no está configurada)
+// 2. Configurar PostgreSQL con Entity Framework Core (Opcional si aún no está conectada la BD)
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-if (string.IsNullOrWhiteSpace(connectionString))
+if (!string.IsNullOrWhiteSpace(connectionString) && !connectionString.Contains("tu_password"))
 {
-    throw new InvalidOperationException("La cadena de conexión 'DefaultConnection' no está configurada en appsettings.json o variables de entorno.");
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseNpgsql(connectionString));
 }
-
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(connectionString));
 
 // 3. Configuración CORS para el frontend (React / Vite)
 builder.Services.AddCors(options =>
@@ -32,36 +31,41 @@ builder.Services.AddCors(options =>
     });
 });
 
-// 4. Inyección de dependencias para el cliente y servicio OCR de Azure
+// 4. Inyección de dependencias para el cliente y servicios OCR de Azure
 // Registro Singleton de DocumentAnalysisClient para reutilizar conexiones HTTP y evitar agotamiento de sockets
 builder.Services.AddSingleton(sp =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
-    var endpoint = config["Azure:FormRecognizer:Endpoint"];
-    var apiKey = config["Azure:FormRecognizer:ApiKey"];
+    var endpoint = config["Azure:FormRecognizer:Endpoint"]
+        ?? config["AzureDocumentIntelligence:Endpoint"];
+    var apiKey = config["Azure:FormRecognizer:ApiKey"]
+        ?? config["AzureDocumentIntelligence:ApiKey"];
 
     if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(apiKey))
     {
-        throw new InvalidOperationException("Las credenciales de Azure Form Recognizer ('Azure:FormRecognizer:Endpoint' y 'Azure:FormRecognizer:ApiKey') no están configuradas.");
+        throw new InvalidOperationException("Las credenciales de Azure ('Endpoint' y 'ApiKey') no están configuradas.");
     }
 
     return new DocumentAnalysisClient(new Uri(endpoint), new AzureKeyCredential(apiKey));
 });
 
+// Registro de servicios de liquidación y planilla
 builder.Services.AddScoped<IOcrAzureService, OcrAzureService>();
 builder.Services.AddScoped<TuProyecto.Application.Interfaces.IOcrAzureService, OcrAzureService>();
+builder.Services.AddScoped<IPlanillaOcrService, PlanillaOcrService>();
 
 var app = builder.Build();
 
-// 5. Configurar el pipeline HTTP
+// 5. Configurar el pipeline HTTP y Swagger UI
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI();
 }
 
 app.UseHttpsRedirection();
 
-// Habilitar CORS antes del mapeo de rutas
+// Habilitar CORS antes de autorización y mapeo de rutas
 app.UseCors("PermitirReact");
 
 app.UseAuthorization();

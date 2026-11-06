@@ -1,3 +1,8 @@
+export interface GastoDetalle {
+  concepto: string;
+  valor: number;
+}
+
 export interface LiquidacionViaje {
   id?: number;
   fechaInicial: string;
@@ -9,23 +14,10 @@ export interface LiquidacionViaje {
   origenViaje: string;
   destino: string;
 
-  // Gastos Operativos (16 campos)
-  peajes: number;
-  porcentaje: number;
-  comision: number;
-  parqueo: number;
-  acpm: number;
-  engrase: number;
-  tensionada: number;
-  aseo: number;
-  llantas: number;
-  urea: number;
-  cargue: number;
-  descargue: number;
-  carrosada: number;
-  descarrosada: number;
-  papeleria: number;
-  otros: number;
+  // Campos específicos de Planilla de Gastos (Azure OCR)
+  flete: number;
+  anticipo: number;
+  detalleGastos: GastoDetalle[];
 
   // Totales y Saldos
   totalGastos: number;
@@ -43,8 +35,8 @@ export interface LiquidacionViaje {
 }
 
 export const VALORES_INICIALES_LIQUIDACION: LiquidacionViaje = {
-  fechaInicial: new Date().toISOString().split('T')[0],
-  fechaFinal: new Date().toISOString().split('T')[0],
+  fechaInicial: new Date().toISOString().split('T')[0] ?? '',
+  fechaFinal: new Date().toISOString().split('T')[0] ?? '',
   conductor: '',
   placa: '',
   manifiesto: '',
@@ -52,22 +44,9 @@ export const VALORES_INICIALES_LIQUIDACION: LiquidacionViaje = {
   origenViaje: '',
   destino: '',
 
-  peajes: 0,
-  porcentaje: 0,
-  comision: 0,
-  parqueo: 0,
-  acpm: 0,
-  engrase: 0,
-  tensionada: 0,
-  aseo: 0,
-  llantas: 0,
-  urea: 0,
-  cargue: 0,
-  descargue: 0,
-  carrosada: 0,
-  descarrosada: 0,
-  papeleria: 0,
-  otros: 0,
+  flete: 0,
+  anticipo: 0,
+  detalleGastos: [],
 
   totalGastos: 0,
   traslado: 0,

@@ -12,14 +12,14 @@ namespace TuProyecto.API.Controllers;
 public class LiquidacionesController : ControllerBase
 {
     private readonly IOcrAzureService _ocrService;
-    private readonly AppDbContext _context;
+    private readonly AppDbContext? _context;
     private readonly ILogger<LiquidacionesController> _logger;
 
-    // Inyectamos el servicio de Azure, el contexto de base de datos obligatorio y logger
+    // Inyectamos el servicio de Azure, el logger y el contexto de base de datos (opcional si la BD no está configurada aún)
     public LiquidacionesController(
         IOcrAzureService ocrService, 
         ILogger<LiquidacionesController> logger,
-        AppDbContext context)
+        AppDbContext? context = null)
     {
         _ocrService = ocrService;
         _logger = logger;
@@ -90,6 +90,14 @@ public class LiquidacionesController : ControllerBase
             return BadRequest(new { mensaje = "Los datos de la liquidación no son válidos." });
         }
 
+        if (_context == null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new 
+            { 
+                mensaje = "La base de datos PostgreSQL no está configurada o conectada todavía. Por favor configure 'DefaultConnection' en appsettings.json." 
+            });
+        }
+
         try
         {
             liquidacion.EstadoRevision = "aprobado";
@@ -115,6 +123,11 @@ public class LiquidacionesController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> ObtenerLiquidaciones()
     {
+        if (_context == null)
+        {
+            return Ok(new List<LiquidacionViaje>());
+        }
+
         var lista = await _context.LiquidacionesViaje
             .AsNoTracking()
             .OrderByDescending(x => x.CreadoEn)
@@ -127,6 +140,14 @@ public class LiquidacionesController : ControllerBase
     [HttpGet("descargar-consolidado")]
     public async Task<IActionResult> DescargarConsolidado()
     {
+        if (_context == null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new 
+            { 
+                mensaje = "No se puede generar el consolidado porque la base de datos PostgreSQL no está conectada." 
+            });
+        }
+
         try
         {
             // AsNoTracking para optimizar memoria en consultas de solo lectura
