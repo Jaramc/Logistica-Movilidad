@@ -74,6 +74,8 @@ public static class LimitesPeticiones
             .ValidateOnStart();
         services.AddSingleton<LimitadorLoginPorUsuario>();
 
+        // Registra los servicios del middleware; la configuración real va abajo (necesita IOptions).
+        services.AddRateLimiter(_ => { });
         services.AddOptions<RateLimiterOptions>().Configure<IOptions<LimitePeticionesOptions>>((opciones, lim) =>
         {
             var l = lim.Value;
