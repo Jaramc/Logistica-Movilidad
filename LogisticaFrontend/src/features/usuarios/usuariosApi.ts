@@ -14,6 +14,11 @@ export interface Usuario {
   bloqueado: boolean;
   creadoEn: string;
   ultimoAcceso: string | null;
+  /** Aún no configura el 2FA. */
+  pendienteActivacion: boolean;
+  passwordTemporalExpiraEn: string | null;
+  /** La contraseña temporal venció (24 h) o ya se usó: hay que generar otra. */
+  passwordTemporalInutilizable: boolean;
 }
 
 export interface UsuarioCreado {
@@ -32,6 +37,10 @@ export const cambiarRol = (id: string, rol: Rol) =>
 
 export const cambiarEstado = (id: string, activo: boolean) =>
   apiClient<Usuario>(`/api/usuarios/${encodeURIComponent(id)}/estado`, { method: 'PUT', body: { activo } });
+
+/** Nueva contraseña temporal (24 h, un solo uso). Se muestra una sola vez. */
+export const regenerarPasswordTemporal = (id: string) =>
+  apiClient<UsuarioCreado>(`/api/usuarios/${encodeURIComponent(id)}/password-temporal`, { method: 'POST' });
 
 export const reiniciar2fa = (id: string) =>
   apiClient<Usuario>(`/api/usuarios/${encodeURIComponent(id)}/reiniciar-2fa`, { method: 'POST' });

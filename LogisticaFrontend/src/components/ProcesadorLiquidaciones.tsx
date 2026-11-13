@@ -135,7 +135,6 @@ export default function ProcesadorLiquidaciones() {
       empresaTransportadora: data.empresaTransportadora,
       flete: toApiDecimalNumber(data.flete),
       anticipo: toApiDecimalNumber(data.anticipo),
-      saldoAnterior: toApiDecimalNumber(data.saldoAnterior),
       gastos: (data.detalleGastos || []).map((g) => ({
         concepto: g.concepto,
         valor: toApiDecimalNumber(g.valor),

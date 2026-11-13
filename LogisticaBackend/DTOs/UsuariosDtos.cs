@@ -10,7 +10,12 @@ public sealed record UsuarioDto(
     bool DebeCambiarPassword,
     bool Bloqueado,
     DateTime CreadoEn,
-    DateTime? UltimoAcceso);
+    DateTime? UltimoAcceso,
+    /// <summary>Aún no configura el 2FA.</summary>
+    bool PendienteActivacion,
+    DateTime? PasswordTemporalExpiraEn,
+    /// <summary>La contraseña temporal venció o ya se usó: hay que generar otra.</summary>
+    bool PasswordTemporalInutilizable);
 
 public sealed record CrearUsuarioDto(string Email, string NombreCompleto, string Rol);
 

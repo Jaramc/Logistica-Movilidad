@@ -39,13 +39,17 @@ public static class InicializadorBaseDatos
         }
 
         var userManager = sp.GetRequiredService<UserManager<Usuario>>();
+        var reloj = sp.GetRequiredService<TimeProvider>();
+        var vigencia = configuration.GetValue("Seguridad:VigenciaPasswordTemporal", TimeSpan.FromHours(24));
+        var email = configuration[VariableEmail];
+        var password = configuration[VariablePassword];
+
         if (await userManager.Users.AnyAsync(cancellationToken))
         {
+            await RenovarAdministradorInicialVencidoAsync(userManager, reloj, vigencia, email, password, logger, cancellationToken);
             return;
         }
 
-        var email = configuration[VariableEmail];
-        var password = configuration[VariablePassword];
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
         {
             logger.LogWarning("No hay usuarios. Defina {VarEmail} y {VarPassword} para crear el primer administrador.",
@@ -60,8 +64,9 @@ public static class InicializadorBaseDatos
             EmailConfirmed = true,
             NombreCompleto = "Administrador inicial",
             Activo = true,
-            DebeCambiarPassword = true, // y sin 2FA: deberá configurarlo antes de usar el sistema
         };
+        // Contraseña temporal de 24 h y un solo uso; sin 2FA: deberá configurarlo antes de usar el sistema.
+        admin.IniciarPasswordTemporal(reloj.GetUtcNow().UtcDateTime, vigencia);
 
         var resultado = await userManager.CreateAsync(admin, password);
         if (!resultado.Succeeded)
@@ -74,5 +79,33 @@ public static class InicializadorBaseDatos
         await userManager.AddToRoleAsync(admin, Roles.Administrador);
         logger.LogWarning("Administrador inicial creado. Elimine {VarPassword} del entorno; deberá cambiar la contraseña y configurar 2FA.",
             VariablePassword);
+    }
+
+    /// <summary>
+    /// Si el único usuario es el administrador inicial, sigue pendiente de activación y su contraseña
+    /// temporal venció o se usó sin completar la activación, nadie podría generarle otra. En ese caso,
+    /// y solo si ADMIN_INICIAL_EMAIL coincide y ADMIN_INICIAL_PASSWORD está definida, se renueva.
+    /// </summary>
+    private static async Task RenovarAdministradorInicialVencidoAsync(UserManager<Usuario> userManager, TimeProvider reloj,
+        TimeSpan vigencia, string? email, string? password, ILogger logger, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password)) return;
+        if (await userManager.Users.CountAsync(cancellationToken) != 1) return;
+
+        var admin = await userManager.FindByEmailAsync(email.Trim());
+        var ahora = reloj.GetUtcNow().UtcDateTime;
+        if (admin is null || !admin.PendienteActivacion || !admin.DebeCambiarPassword || admin.PasswordTemporalVigente(ahora)) return;
+
+        var token = await userManager.GeneratePasswordResetTokenAsync(admin);
+        var resultado = await userManager.ResetPasswordAsync(admin, token, password);
+        if (!resultado.Succeeded)
+        {
+            logger.LogError("No se pudo renovar la contraseña del administrador inicial: {Errores}",
+                string.Join(", ", resultado.Errors.Select(e => e.Code)));
+            return;
+        }
+        admin.IniciarPasswordTemporal(ahora, vigencia);
+        await userManager.UpdateAsync(admin);
+        logger.LogWarning("Contraseña temporal del administrador inicial renovada por 24 horas.");
     }
 }

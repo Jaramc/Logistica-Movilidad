@@ -92,7 +92,6 @@ describe('planillasApi.ts - Rutas Canónicas del Backend', () => {
         fechaFinal: '2026-11-05',
         flete: 6976800,
         anticipo: 2800000,
-        saldoAnterior: 0,
         gastos: [
           { concepto: 'PARQUEO', valor: 178000 }
         ]

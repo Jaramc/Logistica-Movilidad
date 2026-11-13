@@ -68,7 +68,7 @@ builder.Services.AddSingleton(sp =>
 // 6. Registro de Servicios de Dominio e Infraestructura
 builder.Services.AddOptions<LiquidacionesOptions>()
     .Bind(builder.Configuration.GetSection(LiquidacionesOptions.SectionName))
-    .Validate(o => o.TopeValorMonetario > 0 && o.MaximoRenglonesGasto > 0, "Liquidaciones: valores inválidos.")
+    .Validate(o => o.TopeValorMonetario > 0 && o.TopeSaldo > 0 && o.MaximoRenglonesGasto > 0, "Liquidaciones: valores inválidos.")
     .ValidateOnStart();
 builder.Services.AddScoped<IPlanillaOcrService, PlanillaOcrService>();
 builder.Services.AddScoped<IExcelExportService, ExcelExportService>();
@@ -155,6 +155,7 @@ app.UseEncabezadosSeguridad(app.Environment);
 
 // Falla rápido: sin cadena de conexión válida la aplicación no arranca.
 ValidadorConfiguracion.ObtenerCadenaConexion(app.Configuration, app.Environment);
+ValidadorConfiguracion.ValidarDataProtection(app.Configuration, app.Environment);
 await InicializadorBaseDatos.InicializarAsync(app.Services);
 
 // Pipeline de Middleware

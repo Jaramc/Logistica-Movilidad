@@ -86,8 +86,27 @@ public class AuthController : ControllerBase
             return LoginFallido();
         }
 
+        var ahora = _reloj.GetUtcNow().UtcDateTime;
+        if (usuario.DebeCambiarPassword && !usuario.PasswordTemporalVigente(ahora))
+        {
+            // Contraseña temporal vencida (24 h) o ya usada: mismo mensaje genérico. El administrador
+            // ve el estado y debe generar una nueva.
+            HashFicticio.Verificar(_userManager.PasswordHasher, dto.Password);
+            var motivoTemporal = usuario.PasswordTemporalUsadaEn is not null ? "password_temporal_usada" : "password_temporal_vencida";
+            await _auditoria.RegistrarAsync(AccionesAuditoria.LoginFallido, false, usuario.Id, "Usuario", usuario.Id.ToString(),
+                new { motivo = motivoTemporal });
+            return LoginFallido();
+        }
+
         var bloqueadoAntes = await _userManager.IsLockedOutAsync(usuario);
         var resultado = await _signInManager.PasswordSignInAsync(usuario, dto.Password, isPersistent: false, lockoutOnFailure: true);
+
+        if ((resultado.Succeeded || resultado.RequiresTwoFactor) && usuario.DebeCambiarPassword)
+        {
+            // Primer uso de la contraseña temporal: queda consumida.
+            usuario.PasswordTemporalUsadaEn = ahora;
+            await _userManager.UpdateAsync(usuario);
+        }
 
         if (resultado.RequiresTwoFactor)
         {
@@ -213,7 +232,7 @@ public class AuthController : ControllerBase
             return ErroresIdentity(resultado, nameof(CambiarPasswordDto.PasswordNueva));
         }
 
-        usuario.DebeCambiarPassword = false;
+        usuario.FinalizarPasswordTemporal();
         await _userManager.UpdateAsync(usuario);
         await _signInManager.RefreshSignInAsync(usuario); // conserva amr=mfa y el inicio de la sesión
         _logger.LogInformation("Usuario {UsuarioId} cambió su contraseña.", usuario.Id);

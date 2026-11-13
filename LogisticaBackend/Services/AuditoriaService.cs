@@ -18,6 +18,7 @@ public static class AccionesAuditoria
     public const string DosFactoresReiniciado = "DosFactoresReiniciado";
     public const string CodigosRecuperacionRegenerados = "CodigosRecuperacionRegenerados";
     public const string UsuarioCreado = "UsuarioCreado";
+    public const string PasswordTemporalRegenerada = "PasswordTemporalRegenerada";
     public const string RolCambiado = "RolCambiado";
     public const string UsuarioDesactivado = "UsuarioDesactivado";
     public const string UsuarioActivado = "UsuarioActivado";

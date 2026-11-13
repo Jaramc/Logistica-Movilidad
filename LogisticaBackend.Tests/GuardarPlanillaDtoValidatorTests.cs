@@ -22,7 +22,6 @@ public class GuardarPlanillaDtoValidatorTests
         FechaFinal: new DateOnly(2026, 11, 5),
         Flete: 6976800m,
         Anticipo: 2800000m,
-        SaldoAnterior: 0m,
         Gastos: new List<GastoItemDto>
         {
             new("PARQUEO", 178000m),
@@ -146,9 +145,19 @@ public class GuardarPlanillaDtoValidatorTests
     }
 
     [Fact]
-    public void Validar_SaldoAnteriorNegativo_EsRechazado()
+    public void Validar_GastoSobreTopeDe20Millones_EsRechazado()
     {
-        _validator.Validate(CrearDtoValido() with { SaldoAnterior = -1m }).IsValid.ShouldBeFalse();
+        var dto = CrearDtoValido() with { Gastos = new List<GastoItemDto> { new("ACPM", 20_000_001m) } };
+        _validator.Validate(dto).IsValid.ShouldBeFalse();
+        (CrearDtoValido() with { Gastos = new List<GastoItemDto> { new("ACPM", 20_000_000m) } }).ShouldSatisfyAllConditions(
+            d => _validator.Validate(d).IsValid.ShouldBeTrue());
+    }
+
+    [Fact]
+    public void Validar_FleteOAnticipoSobreTope_SonRechazados()
+    {
+        _validator.Validate(CrearDtoValido() with { Flete = 20_000_001m }).IsValid.ShouldBeFalse();
+        _validator.Validate(CrearDtoValido() with { Anticipo = 20_000_001m }).IsValid.ShouldBeFalse();
     }
 
     [Fact]

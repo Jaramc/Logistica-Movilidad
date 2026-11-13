@@ -83,7 +83,6 @@ export const GuardarPlanillaDtoSchema = z.object({
   empresaTransportadora: z.string().optional(),
   flete: z.number(),
   anticipo: z.number(),
-  saldoAnterior: z.number(),
   gastos: z.array(
     z.object({
       concepto: z.string().min(1),

@@ -24,7 +24,7 @@ export interface Pagina<T> {
 export const ACCIONES = [
   'LoginExitoso', 'LoginFallido', 'CuentaBloqueada', 'SegundoFactorExitoso', 'SegundoFactorFallido', 'Logout',
   'CambioPassword', 'DosFactoresConfigurado', 'DosFactoresReiniciado', 'CodigosRecuperacionRegenerados',
-  'UsuarioCreado', 'RolCambiado', 'UsuarioDesactivado', 'UsuarioActivado', 'PlanillaGuardada', 'ConsolidadoDescargado',
+  'UsuarioCreado', 'PasswordTemporalRegenerada', 'RolCambiado', 'UsuarioDesactivado', 'UsuarioActivado', 'PlanillaGuardada', 'ConsolidadoDescargado',
 ];
 
 export function obtenerAuditoria(pagina: number, accion: string): Promise<Pagina<RegistroAuditoria>> {

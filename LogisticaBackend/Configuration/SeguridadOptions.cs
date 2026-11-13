@@ -20,4 +20,13 @@ public class SeguridadOptions
     /// <summary>Carpeta persistente de las claves de Data Protection (cifran las cookies).
     /// En Docker debe ser un volumen; si se pierde, todas las sesiones se cierran.</summary>
     public string? RutaClavesDataProtection { get; set; }
+
+    /// <summary>Vigencia de una contraseña temporal. Pasado este tiempo el administrador debe generar otra.</summary>
+    public TimeSpan VigenciaPasswordTemporal { get; set; } = TimeSpan.FromHours(24);
+
+    /// <summary>Palabras que ninguna contraseña puede contener (empresa, sector). Sin tildes ni mayúsculas importan.</summary>
+    public string[] PalabrasProhibidas { get; set; } =
+    {
+        "logistica", "movilidad", "logisticaymovilidad", "lym", "transportes",
+    };
 }

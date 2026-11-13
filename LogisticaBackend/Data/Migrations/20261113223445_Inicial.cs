@@ -56,6 +56,8 @@ namespace LogisticaBackend.Data.Migrations
                     DebeCambiarPassword = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
                     CreadoEn = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UltimoAcceso = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    PasswordTemporalExpiraEn = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    PasswordTemporalUsadaEn = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     UserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     NormalizedUserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     Email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),

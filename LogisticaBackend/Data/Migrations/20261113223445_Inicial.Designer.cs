@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace LogisticaBackend.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20261113213951_Inicial")]
+    [Migration("20261113223445_Inicial")]
     partial class Inicial
     {
         /// <inheritdoc />
@@ -337,6 +337,12 @@ namespace LogisticaBackend.Data.Migrations
 
                     b.Property<string>("PasswordHash")
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("PasswordTemporalExpiraEn")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("PasswordTemporalUsadaEn")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("text");

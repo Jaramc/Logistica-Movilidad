@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Shouldly;
+using LogisticaBackend.Configuration;
 using LogisticaBackend.Controllers;
 using LogisticaBackend.Data;
 using LogisticaBackend.Domain.Entities;
@@ -25,6 +26,16 @@ public class PlanillasControllerTests
     private readonly Mock<ILogger<PlanillasController>> _loggerMock = new();
     private readonly Mock<IAuditoriaService> _auditoriaMock = new();
 
+    /// <summary>Servicios mínimos para que el controlador pueda crear ProblemDetails.</summary>
+    private static readonly Lazy<IServiceProvider> ServiciosMvc = new(() =>
+    {
+        var servicios = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        Microsoft.Extensions.DependencyInjection.LoggingServiceCollectionExtensions.AddLogging(servicios);
+        Microsoft.Extensions.DependencyInjection.MvcServiceCollectionExtensions.AddControllers(servicios);
+        LogisticaBackend.Middleware.ConfiguracionProblemDetails.AddProblemDetailsLogistica(servicios);
+        return Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider(servicios);
+    });
+
     private (PlanillasController Controller, AppDbContext Context) CrearControllerConDb()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -41,12 +52,13 @@ public class PlanillasControllerTests
             context,
             new RelojFijo(new DateTimeOffset(2026, 11, 13, 15, 0, 0, TimeSpan.Zero)),
             _auditoriaMock.Object,
+            Microsoft.Extensions.Options.Options.Create(new LiquidacionesOptions()),
             _loggerMock.Object
         )
         {
             ControllerContext = new ControllerContext
             {
-                HttpContext = new DefaultHttpContext { User = usuario }
+                HttpContext = new DefaultHttpContext { User = usuario, RequestServices = ServiciosMvc.Value }
             }
         };
 
@@ -64,7 +76,6 @@ public class PlanillasControllerTests
         EmpresaTransportadora: "LOGISTICA S.A.S.",
         Flete: 6976800m,
         Anticipo: 2800000m,
-        SaldoAnterior: 0m,
         Gastos: new List<GastoItemDto>
         {
             new("PARQUEO", 178000m),
@@ -95,6 +106,46 @@ public class PlanillasControllerTests
         planilla.EstadoRevision.ShouldBe(EstadoRevision.Aprobado);
         _auditoriaMock.Verify(a => a.RegistrarAsync(AccionesAuditoria.PlanillaGuardada, true, UsuarioId, "PlanillaViaje",
             planilla.Id.ToString(), It.IsAny<object?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GuardarPlanilla_TomaElSaldoAnteriorDeLaUltimaPlanillaDelConductor()
+    {
+        var (controller, context) = CrearControllerConDb();
+        context.Planillas.AddRange(
+            new PlanillaViaje { Placa = "WCN410", Conductor = "PEDRO PEREZ", FechaInicial = new DateOnly(2026, 9, 1),
+                FechaFinal = new DateOnly(2026, 9, 5), SaldoTotal = -2_610_054m },
+            new PlanillaViaje { Placa = "WCN410", Conductor = "PEDRO PEREZ", FechaInicial = new DateOnly(2026, 10, 1),
+                FechaFinal = new DateOnly(2026, 10, 5), SaldoTotal = -150_000m },   // la más reciente
+            new PlanillaViaje { Placa = "ABC123", Conductor = "OTRO CONDUCTOR", FechaInicial = new DateOnly(2026, 10, 20),
+                FechaFinal = new DateOnly(2026, 10, 25), SaldoTotal = 999_999m });
+        await context.SaveChangesAsync();
+
+        // Mismo conductor escrito distinto: debe reconocerse.
+        var result = await controller.GuardarPlanilla(DtoPlanillaReal() with { Conductor = "  pedro   perez " }, CancellationToken.None);
+
+        result.ShouldBeOfType<CreatedAtActionResult>();
+        var nueva = await context.Planillas.OrderByDescending(p => p.Id).FirstAsync();
+        nueva.Conductor.ShouldBe("PEDRO PEREZ");
+        nueva.SaldoAnterior.ShouldBe(-150_000m);
+        nueva.SaldoViaje.ShouldBe(69_200m);
+        nueva.SaldoTotal.ShouldBe(-80_800m); // los saldos pueden quedar negativos
+    }
+
+    [Fact]
+    public async Task GuardarPlanilla_SaldoFueraDelTope_Retorna422()
+    {
+        var (controller, context) = CrearControllerConDb();
+        context.Planillas.Add(new PlanillaViaje { Placa = "WCN410", Conductor = "PEDRO PEREZ",
+            FechaInicial = new DateOnly(2026, 10, 1), FechaFinal = new DateOnly(2026, 10, 5), SaldoTotal = -100_000_000m });
+        await context.SaveChangesAsync();
+
+        // -100.000.000 + 69.200 está dentro; con un anticipo mayor el saldo total supera el tope negativo.
+        var result = await controller.GuardarPlanilla(DtoPlanillaReal() with { Anticipo = 3_000_000m }, CancellationToken.None);
+
+        var obj = result.ShouldBeOfType<ObjectResult>();
+        obj.StatusCode.ShouldBe(StatusCodes.Status422UnprocessableEntity);
+        (await context.Planillas.CountAsync()).ShouldBe(1);
     }
 
     [Fact]

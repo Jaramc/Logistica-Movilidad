@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using LogisticaBackend.Configuration;
 
 namespace LogisticaBackend.Controllers;
 
@@ -20,10 +22,13 @@ public class UsuariosController : ControllerBase
     private readonly UserManager<Usuario> _userManager;
     private readonly TimeProvider _reloj;
     private readonly IAuditoriaService _auditoria;
+    private readonly SeguridadOptions _seguridad;
     private readonly ILogger<UsuariosController> _logger;
 
-    public UsuariosController(UserManager<Usuario> userManager, TimeProvider reloj, IAuditoriaService auditoria, ILogger<UsuariosController> logger)
+    public UsuariosController(UserManager<Usuario> userManager, TimeProvider reloj, IAuditoriaService auditoria,
+        IOptions<SeguridadOptions> seguridad, ILogger<UsuariosController> logger)
     {
+        _seguridad = seguridad.Value;
         _userManager = userManager;
         _reloj = reloj;
         _auditoria = auditoria;
@@ -60,9 +65,9 @@ public class UsuariosController : ControllerBase
             EmailConfirmed = true,
             NombreCompleto = dto.NombreCompleto.Trim(),
             Activo = true,
-            DebeCambiarPassword = true,
             CreadoEn = _reloj.GetUtcNow().UtcDateTime,
         };
+        usuario.IniciarPasswordTemporal(_reloj.GetUtcNow().UtcDateTime, _seguridad.VigenciaPasswordTemporal);
 
         var passwordTemporal = GeneradorPassword.Generar();
         var creado = await _userManager.CreateAsync(usuario, passwordTemporal);
@@ -143,6 +148,34 @@ public class UsuariosController : ControllerBase
         return Ok(await ADtoAsync(usuario));
     }
 
+    /// <summary>
+    /// Genera una contraseña temporal nueva (24 h, un solo uso) cuando la anterior venció, ya se usó
+    /// o el usuario olvidó la suya. Cierra sus sesiones abiertas.
+    /// </summary>
+    [HttpPost("{id:guid}/password-temporal")]
+    [ProducesResponseType(typeof(UsuarioCreadoDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> RegenerarPasswordTemporal(Guid id)
+    {
+        var usuario = await _userManager.FindByIdAsync(id.ToString());
+        if (usuario is null) return NoEncontrado();
+
+        var passwordTemporal = GeneradorPassword.Generar();
+        var token = await _userManager.GeneratePasswordResetTokenAsync(usuario);
+        var resultado = await _userManager.ResetPasswordAsync(usuario, token, passwordTemporal); // rota el stamp
+        if (!resultado.Succeeded)
+        {
+            return ErroresIdentity(resultado, "password");
+        }
+
+        usuario.IniciarPasswordTemporal(_reloj.GetUtcNow().UtcDateTime, _seguridad.VigenciaPasswordTemporal);
+        await _userManager.UpdateAsync(usuario);
+        await _userManager.ResetAccessFailedCountAsync(usuario);
+
+        await _auditoria.RegistrarAsync(AccionesAuditoria.PasswordTemporalRegenerada, true, IdActual(), "Usuario", usuario.Id.ToString());
+        _logger.LogInformation("Administrador {AdminId} generó una contraseña temporal para {UsuarioId}.", IdActual(), usuario.Id);
+        return Ok(new UsuarioCreadoDto(await ADtoAsync(usuario), passwordTemporal));
+    }
+
     /// <summary>Desactiva el 2FA del usuario y cierra sus sesiones. Deberá configurarlo de nuevo al entrar.</summary>
     [HttpPost("{id:guid}/reiniciar-2fa")]
     [ProducesResponseType(typeof(UsuarioDto), StatusCodes.Status200OK)]
@@ -172,9 +205,12 @@ public class UsuariosController : ControllerBase
     private async Task<UsuarioDto> ADtoAsync(Usuario u)
     {
         var rol = (await _userManager.GetRolesAsync(u)).FirstOrDefault();
-        var bloqueado = u.LockoutEnd.HasValue && u.LockoutEnd.Value > _reloj.GetUtcNow();
+        var ahora = _reloj.GetUtcNow();
+        var bloqueado = u.LockoutEnd.HasValue && u.LockoutEnd.Value > ahora;
+        var temporalInutilizable = u.DebeCambiarPassword && !u.PasswordTemporalVigente(ahora.UtcDateTime);
         return new UsuarioDto(u.Id, u.Email!, u.NombreCompleto, rol, u.Activo, u.TwoFactorEnabled,
-            u.DebeCambiarPassword, bloqueado, u.CreadoEn, u.UltimoAcceso);
+            u.DebeCambiarPassword, bloqueado, u.CreadoEn, u.UltimoAcceso,
+            u.PendienteActivacion, u.PasswordTemporalExpiraEn, temporalInutilizable);
     }
 
     private Guid? IdActual() => Guid.TryParse(_userManager.GetUserId(User), out var id) ? id : null;

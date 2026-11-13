@@ -16,6 +16,7 @@ public static class ConfiguracionIdentidad
 {
     public const string NombreCookieSesion = "__Host-logistica";
     public const string NombreCookie2fa = "__Host-logistica-2fa";
+    public const string NombreProveedorTotp = "LogisticaTotp";
 
     public static IServiceCollection AddIdentidadLogistica(this IServiceCollection services, IConfiguration configuration)
     {
@@ -48,13 +49,17 @@ public static class ConfiguracionIdentidad
                 o.SignIn.RequireConfirmedAccount = true;
                 o.SignIn.RequireConfirmedEmail = false;
                 o.SignIn.RequireConfirmedPhoneNumber = false;
+
+                // TOTP propio: ±30 s y sin reutilización del mismo código.
+                o.Tokens.AuthenticatorTokenProvider = NombreProveedorTotp;
             })
             .AddEntityFrameworkStores<AppDbContext>()
             .AddUserStore<UsuarioStore>()
             .AddClaimsPrincipalFactory<UsuarioClaimsPrincipalFactory>()
             .AddErrorDescriber<IdentityErrorDescriberEs>()
-            .AddPasswordValidator<PasswordSinDatosPersonalesValidator>()
-            .AddDefaultTokenProviders();
+            .AddPasswordValidator<PasswordProhibidaValidator>()
+            .AddDefaultTokenProviders()
+            .AddTokenProvider<TotpSinReutilizacionProvider>(NombreProveedorTotp);
 
         services.AddScoped<IUserConfirmation<Usuario>, UsuarioActivoConfirmation>();
 

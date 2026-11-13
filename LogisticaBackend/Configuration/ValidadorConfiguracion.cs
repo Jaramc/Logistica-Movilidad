@@ -50,6 +50,20 @@ public static class ValidadorConfiguracion
         }
     }
 
+    /// <summary>
+    /// En Production las llaves de Data Protection deben vivir en una carpeta persistente (volumen
+    /// incluido en los backups), fuera de la base de datos. Si se pierden, se invalidan todas las
+    /// sesiones y el 2FA de todos los usuarios.
+    /// </summary>
+    public static void ValidarDataProtection(IConfiguration configuration, IHostEnvironment entorno)
+    {
+        if (entorno.IsProduction() && string.IsNullOrWhiteSpace(configuration["Seguridad:RutaClavesDataProtection"]))
+        {
+            throw new InvalidOperationException(
+                "Falta Seguridad:RutaClavesDataProtection. En producción debe apuntar a un volumen persistente incluido en los backups.");
+        }
+    }
+
     public static bool ContieneValorDeEjemplo(string valor) =>
         MarcadoresDeEjemplo.Any(m => valor.Contains(m, StringComparison.OrdinalIgnoreCase));
 }

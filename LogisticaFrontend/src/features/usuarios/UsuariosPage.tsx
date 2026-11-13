@@ -6,7 +6,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import type { Rol } from '../auth/authApi';
 import { useSesion } from '../auth/sesionContext';
-import { cambiarEstado, cambiarRol, crearUsuario, listarUsuarios, reiniciar2fa, ROLES, type UsuarioCreado } from './usuariosApi';
+import { cambiarEstado, cambiarRol, crearUsuario, listarUsuarios, regenerarPasswordTemporal, reiniciar2fa, ROLES, type UsuarioCreado } from './usuariosApi';
 
 const CLAVE = ['usuarios'];
 
@@ -50,6 +50,14 @@ export function UsuariosPage() {
   const rolMut = useMutation({ mutationFn: (v: { id: string; rol: Rol }) => cambiarRol(v.id, v.rol), onSuccess: refrescar, onError: alFallar });
   const estadoMut = useMutation({ mutationFn: (v: { id: string; activo: boolean }) => cambiarEstado(v.id, v.activo), onSuccess: refrescar, onError: alFallar });
   const reiniciarMut = useMutation({ mutationFn: reiniciar2fa, onSuccess: refrescar, onError: alFallar });
+  const temporalMut = useMutation({
+    mutationFn: regenerarPasswordTemporal,
+    onSuccess: (r) => {
+      setCreado(r);
+      void refrescar();
+    },
+    onError: alFallar,
+  });
 
   const enviar = (e: FormEvent) => {
     e.preventDefault();
@@ -72,8 +80,9 @@ export function UsuariosPage() {
       )}
 
       {creado && (
-        <Alert variant="success" title="Usuario creado" onDismiss={() => setCreado(null)}>
-          Entregue esta contraseña temporal a <strong>{creado.usuario.email}</strong> por un canal seguro. Se muestra una sola vez:
+        <Alert variant="success" title="Contraseña temporal generada" onDismiss={() => setCreado(null)}>
+          Entregue esta contraseña temporal a <strong>{creado.usuario.email}</strong> por un canal seguro. Se muestra una sola
+          vez, sirve para un solo inicio de sesión y vence en 24 horas:
           <code className="block mt-2 font-mono text-base bg-white border border-emerald-200 rounded px-2 py-1 select-all" data-testid="password-temporal">
             {creado.passwordTemporal}
           </code>
@@ -143,9 +152,12 @@ export function UsuariosPage() {
                     </select>
                   </td>
                   <td className="px-4 py-2 text-xs">
-                    {u.activo ? 'Activo' : 'Inactivo'}
+                    {!u.activo ? 'Inactivo' : u.pendienteActivacion ? 'Pendiente de activación' : 'Activo'}
                     {u.bloqueado && u.activo && ' · Bloqueado'}
-                    {u.debeCambiarPassword && ' · Contraseña temporal'}
+                    {u.debeCambiarPassword && !u.passwordTemporalInutilizable && ' · Contraseña temporal vigente'}
+                    {u.passwordTemporalInutilizable && (
+                      <span className="text-rose-700"> · Contraseña temporal vencida o usada</span>
+                    )}
                   </td>
                   <td className="px-4 py-2 text-xs">{u.tiene2fa ? 'Configurado' : 'Pendiente'}</td>
                   <td className="px-4 py-2 text-xs">{fecha(u.ultimoAcceso)}</td>
@@ -172,6 +184,17 @@ export function UsuariosPage() {
                       }}
                     >
                       Reiniciar 2FA
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        if (window.confirm(`¿Generar una contraseña temporal nueva para ${u.email}? Sus sesiones se cerrarán.`)) {
+                          temporalMut.mutate(u.id);
+                        }
+                      }}
+                    >
+                      Nueva contraseña temporal
                     </Button>
                   </td>
                 </tr>

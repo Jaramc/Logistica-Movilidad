@@ -335,6 +335,12 @@ namespace LogisticaBackend.Data.Migrations
                     b.Property<string>("PasswordHash")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("PasswordTemporalExpiraEn")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("PasswordTemporalUsadaEn")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("text");
 

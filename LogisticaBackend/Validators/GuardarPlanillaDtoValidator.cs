@@ -49,8 +49,6 @@ public class GuardarPlanillaDtoValidator : AbstractValidator<GuardarPlanillaDto>
             .WithMessage($"El flete debe estar entre 0 y {topeTexto}.");
         RuleFor(x => x.Anticipo).InclusiveBetween(0m, tope)
             .WithMessage($"El anticipo debe estar entre 0 y {topeTexto}.");
-        RuleFor(x => x.SaldoAnterior).InclusiveBetween(0m, tope)
-            .WithMessage($"El saldo anterior debe estar entre 0 y {topeTexto}.");
 
         RuleFor(x => x.Gastos)
             .NotNull().WithMessage("La lista de gastos es obligatoria.")

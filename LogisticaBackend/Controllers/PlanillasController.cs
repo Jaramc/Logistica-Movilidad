@@ -2,7 +2,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using LogisticaBackend.Auth;
+using LogisticaBackend.Configuration;
 using LogisticaBackend.Data;
 using LogisticaBackend.Domain.Entities;
 using LogisticaBackend.Domain.Services;
@@ -23,6 +25,7 @@ public class PlanillasController : ControllerBase
     private readonly AppDbContext _context;
     private readonly TimeProvider _reloj;
     private readonly IAuditoriaService _auditoria;
+    private readonly LiquidacionesOptions _reglas;
     private readonly ILogger<PlanillasController> _logger;
 
     public PlanillasController(
@@ -31,6 +34,7 @@ public class PlanillasController : ControllerBase
         AppDbContext context,
         TimeProvider reloj,
         IAuditoriaService auditoria,
+        IOptions<LiquidacionesOptions> reglas,
         ILogger<PlanillasController> logger)
     {
         _ocrService = ocrService ?? throw new ArgumentNullException(nameof(ocrService));
@@ -38,6 +42,7 @@ public class PlanillasController : ControllerBase
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _reloj = reloj ?? throw new ArgumentNullException(nameof(reloj));
         _auditoria = auditoria ?? throw new ArgumentNullException(nameof(auditoria));
+        _reglas = reglas?.Value ?? throw new ArgumentNullException(nameof(reglas));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -89,15 +94,42 @@ public class PlanillasController : ControllerBase
         CancellationToken cancellationToken)
     {
         var usuarioId = IdUsuarioActual();
+        var conductor = NormalizarConductor(dto.Conductor);
+
+        // Transacción + bloqueo por conductor: dos guardados simultáneos del mismo conductor no
+        // pueden tomar el mismo saldo anterior.
+        await using var transaccion = _context.Database.IsRelational()
+            ? await _context.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        if (_context.Database.IsNpgsql())
+        {
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtext({"planilla-conductor:" + conductor}))", cancellationToken);
+        }
+
+        // El saldo anterior NUNCA viene del cliente: es el SaldoTotal de la última planilla del conductor.
+        var saldoAnterior = await _context.Planillas.AsNoTracking()
+            .Where(p => p.Conductor.ToUpper() == conductor)
+            .OrderByDescending(p => p.FechaFinal).ThenByDescending(p => p.Id)
+            .Select(p => (decimal?)p.SaldoTotal)
+            .FirstOrDefaultAsync(cancellationToken) ?? 0m;
+
         var calculo = CalculadoraLiquidacion.Calcular(
-            dto.Flete, dto.Anticipo, dto.Gastos.Select(g => g.Valor), dto.SaldoAnterior);
+            dto.Flete, dto.Anticipo, dto.Gastos.Select(g => g.Valor), saldoAnterior);
+
+        var erroresSaldo = ValidarTopeSaldos(saldoAnterior, calculo);
+        if (erroresSaldo.Count > 0)
+        {
+            return Problemas.Validacion(HttpContext, erroresSaldo);
+        }
+
         var ahora = _reloj.GetUtcNow().UtcDateTime;
 
         // Mapeo explícito: solo se copian los campos permitidos (anti-overposting).
         var entidad = new PlanillaViaje
         {
             Placa = Placa.Normalizar(dto.Placa),
-            Conductor = dto.Conductor.Trim(),
+            Conductor = conductor,
             Origen = dto.Origen.Trim(),
             Destino = dto.Destino.Trim(),
             FechaInicial = dto.FechaInicial,
@@ -106,7 +138,7 @@ public class PlanillasController : ControllerBase
             EmpresaTransportadora = string.IsNullOrWhiteSpace(dto.EmpresaTransportadora) ? null : dto.EmpresaTransportadora.Trim(),
             Flete = CalculadoraLiquidacion.Redondear(dto.Flete),
             Anticipo = CalculadoraLiquidacion.Redondear(dto.Anticipo),
-            SaldoAnterior = CalculadoraLiquidacion.Redondear(dto.SaldoAnterior),
+            SaldoAnterior = CalculadoraLiquidacion.Redondear(saldoAnterior),
             TotalGastos = calculo.TotalGastos,
             SaldoViaje = calculo.SaldoViaje,
             SaldoTotal = calculo.SaldoTotal,
@@ -126,6 +158,10 @@ public class PlanillasController : ControllerBase
 
         await _context.Planillas.AddAsync(entidad, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
+        if (transaccion is not null)
+        {
+            await transaccion.CommitAsync(cancellationToken);
+        }
 
         _logger.LogInformation("Planilla {Id} guardada por el usuario {UsuarioId}.", entidad.Id, usuarioId);
         await _auditoria.RegistrarAsync(AccionesAuditoria.PlanillaGuardada, true, usuarioId, "PlanillaViaje", entidad.Id.ToString(),
@@ -225,6 +261,28 @@ public class PlanillasController : ControllerBase
     public IActionResult ObtenerCatalogoConceptos()
     {
         return Ok(ConceptoNormalizer.ObtenerCatalogo());
+    }
+
+    /// <summary>Mayúsculas y espacios simples: "  pedro  perez " y "PEDRO PEREZ" son el mismo conductor.</summary>
+    public static string NormalizarConductor(string conductor) =>
+        string.Join(' ', conductor.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)).ToUpperInvariant();
+
+    private Dictionary<string, string[]> ValidarTopeSaldos(decimal saldoAnterior, ResultadoCalculo calculo)
+    {
+        var tope = _reglas.TopeSaldo;
+        var errores = new Dictionary<string, string[]>();
+        var texto = tope.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("es-CO"));
+        void Revisar(string campo, string nombre, decimal valor)
+        {
+            if (Math.Abs(valor) > tope)
+            {
+                errores[campo] = new[] { $"El {nombre} calculado ({valor:N0}) supera el máximo permitido de ±{texto}." };
+            }
+        }
+        Revisar("saldoAnterior", "saldo anterior", saldoAnterior);
+        Revisar("saldoViaje", "saldo del viaje", calculo.SaldoViaje);
+        Revisar("saldoTotal", "saldo total", calculo.SaldoTotal);
+        return errores;
     }
 
     private Guid? IdUsuarioActual()

@@ -140,8 +140,9 @@ export const DatosViajeForm: React.FC<DatosViajeFormProps> = ({ form }) => {
                 permiteNegativos
                 value={field.value}
                 onChange={field.onChange}
+                disabled
                 error={errors.saldoAnterior?.message}
-                helperText="Saldo a favor/contra de viajes previos"
+                helperText="Lo asigna el servidor: saldo total de la última planilla del conductor"
               />
             )}
           />

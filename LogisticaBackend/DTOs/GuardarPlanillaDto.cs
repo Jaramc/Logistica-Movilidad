@@ -2,8 +2,9 @@ namespace LogisticaBackend.DTOs;
 
 /// <summary>
 /// Comando para guardar/aprobar una planilla (anti-overposting).
-/// No incluye Id, EstadoRevision, CreadoEn, autoría ni totales: el servidor los asigna y
-/// recalcula. Cualquier campo extra en el JSON (id, totalGastos, ...) se ignora.
+/// No incluye Id, EstadoRevision, CreadoEn, autoría, totales ni SaldoAnterior: el servidor los
+/// asigna o calcula. SaldoAnterior sale del SaldoTotal de la última planilla del mismo conductor.
+/// Cualquier campo extra en el JSON (id, totalGastos, saldoAnterior, ...) se ignora.
 /// </summary>
 public record GuardarPlanillaDto(
     string Placa,
@@ -16,7 +17,6 @@ public record GuardarPlanillaDto(
     string? EmpresaTransportadora,
     decimal Flete,
     decimal Anticipo,
-    decimal SaldoAnterior,
     List<GastoItemDto> Gastos
 );
 
