@@ -65,6 +65,10 @@ builder.Services.AddSingleton(sp =>
 });
 
 // 6. Registro de Servicios de Dominio e Infraestructura
+builder.Services.AddOptions<LiquidacionesOptions>()
+    .Bind(builder.Configuration.GetSection(LiquidacionesOptions.SectionName))
+    .Validate(o => o.TopeValorMonetario > 0 && o.MaximoRenglonesGasto > 0, "Liquidaciones: valores inválidos.")
+    .ValidateOnStart();
 builder.Services.AddScoped<IPlanillaOcrService, PlanillaOcrService>();
 builder.Services.AddScoped<IExcelExportService, ExcelExportService>();
 

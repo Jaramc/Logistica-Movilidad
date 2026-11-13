@@ -69,6 +69,11 @@ public class PlanillaViajeConfiguration : IEntityTypeConfiguration<PlanillaViaje
             .HasColumnName("json_ocr_crudo")
             .HasColumnType("jsonb");
 
+        builder.Property(x => x.CreadoPorUsuarioId).HasColumnName("creado_por_usuario_id");
+        builder.Property(x => x.RevisadoPorUsuarioId).HasColumnName("revisado_por_usuario_id");
+        builder.HasOne(x => x.CreadoPor).WithMany().HasForeignKey(x => x.CreadoPorUsuarioId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.RevisadoPor).WithMany().HasForeignKey(x => x.RevisadoPorUsuarioId).OnDelete(DeleteBehavior.Restrict);
+
         builder.Property(x => x.CreadoEn)
             .HasColumnName("creado_en")
             .HasColumnType("timestamp with time zone")

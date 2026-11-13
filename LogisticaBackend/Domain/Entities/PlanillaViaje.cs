@@ -29,6 +29,14 @@ public class PlanillaViaje
     public DateTime CreadoEn { get; set; } = DateTime.UtcNow;
     public DateTime ActualizadoEn { get; set; } = DateTime.UtcNow;
 
+    /// <summary>Usuario que guardó la planilla. Se toma de la sesión, nunca del cuerpo de la petición.</summary>
+    public Guid? CreadoPorUsuarioId { get; set; }
+    public Usuario? CreadoPor { get; set; }
+
+    /// <summary>Usuario que la revisó/aprobó. Se toma de la sesión, nunca del cuerpo de la petición.</summary>
+    public Guid? RevisadoPorUsuarioId { get; set; }
+    public Usuario? RevisadoPor { get; set; }
+
     /// <summary>
     /// Token de concurrencia optimista nativo de PostgreSQL (columna oculta de sistema xmin).
     /// </summary>

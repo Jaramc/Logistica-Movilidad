@@ -69,7 +69,8 @@ export type PlanillaFormData = z.infer<typeof PlanillaFormSchema>;
 
 /**
  * DTO de Comando estricto para Guardar en Base de Datos (Anti-Overposting).
- * Se excluyen deliberadamente 'id', 'creadoEn', 'actualizadoEn' y 'estadoRevision'.
+ * Se excluyen 'id', 'creadoEn', 'estadoRevision' y TODOS los totales:
+ * el servidor los recalcula con decimal y los devuelve en la respuesta.
  */
 export const GuardarPlanillaDtoSchema = z.object({
   placa: z.string().min(1),
@@ -82,10 +83,7 @@ export const GuardarPlanillaDtoSchema = z.object({
   empresaTransportadora: z.string().optional(),
   flete: z.number(),
   anticipo: z.number(),
-  totalGastos: z.number(),
-  saldoViaje: z.number(),
   saldoAnterior: z.number(),
-  saldoTotal: z.number(),
   gastos: z.array(
     z.object({
       concepto: z.string().min(1),

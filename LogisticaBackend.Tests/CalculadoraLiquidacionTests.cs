@@ -88,41 +88,6 @@ public class CalculadoraLiquidacionTests
     }
 
     [Theory]
-    [InlineData(100.00, 100.005, true)]  // Diferencia <= 0.01
-    [InlineData(100.00, 100.01, true)]   // Diferencia exacta 0.01
-    [InlineData(100.00, 100.02, false)]  // Diferencia > 0.01
-    [InlineData(100.00, 99.98, false)]   // Diferencia > 0.01
-    public void ValidarTotalesEnviados_ToleranciaUnCentavo(decimal totalGastosEnviado, decimal gastoReal, bool esperado)
-    {
-        var dto = new GuardarPlanillaDto(
-            Placa: "WCN410",
-            Conductor: "PEDRO PEREZ",
-            Origen: "BOGOTA",
-            Destino: "MEDELLIN",
-            FechaInicial: new DateOnly(2026, 11, 1),
-            FechaFinal: new DateOnly(2026, 11, 5),
-            Flete: 1000m,
-            Anticipo: 500m,
-            TotalGastos: totalGastosEnviado,
-            SaldoViaje: totalGastosEnviado - 500m,
-            SaldoAnterior: 0m,
-            SaldoTotal: totalGastosEnviado - 500m,
-            Gastos: new List<GastoItemDto> { new("PARQUEO", gastoReal) },
-            Manifiesto: null,
-            EmpresaTransportadora: null
-        );
-
-        var (esValido, mensajeError, _) = CalculadoraLiquidacion.ValidarTotalesEnviados(dto);
-
-        esValido.ShouldBe(esperado);
-        if (!esperado)
-        {
-            mensajeError.ShouldNotBeNullOrWhiteSpace();
-            mensajeError.ShouldContain("TotalGastos");
-        }
-    }
-
-    [Theory]
     [InlineData("$ 6.976.800", 6976800)]
     [InlineData("2.800.000", 2800000)]
     [InlineData("1.500.000,50", 1500000.50)]

@@ -1,5 +1,7 @@
 using Shouldly;
+using LogisticaBackend.Configuration;
 using LogisticaBackend.DTOs;
+using LogisticaBackend.Tests.Soporte;
 using LogisticaBackend.Validators;
 using Xunit;
 
@@ -7,7 +9,9 @@ namespace LogisticaBackend.Tests;
 
 public class GuardarPlanillaDtoValidatorTests
 {
-    private readonly GuardarPlanillaDtoValidator _validator = new();
+    private readonly GuardarPlanillaDtoValidator _validator = new(
+        Microsoft.Extensions.Options.Options.Create(new LiquidacionesOptions()),
+        new RelojFijo(new DateTimeOffset(2026, 11, 13, 15, 0, 0, TimeSpan.Zero)));
 
     private static GuardarPlanillaDto CrearDtoValido() => new(
         Placa: "WCN410",
@@ -18,10 +22,7 @@ public class GuardarPlanillaDtoValidatorTests
         FechaFinal: new DateOnly(2026, 11, 5),
         Flete: 6976800m,
         Anticipo: 2800000m,
-        TotalGastos: 2869200m,
-        SaldoViaje: 69200m,
         SaldoAnterior: 0m,
-        SaldoTotal: 69200m,
         Gastos: new List<GastoItemDto>
         {
             new("PARQUEO", 178000m),
@@ -114,5 +115,45 @@ public class GuardarPlanillaDtoValidatorTests
 
         resultado.IsValid.ShouldBeFalse();
         resultado.Errors.ShouldContain(e => e.PropertyName == "Anticipo");
+    }
+
+    [Theory]
+    [InlineData("WCN410", true)]
+    [InlineData("wcn 410", true)]   // se normaliza
+    [InlineData("WCN-410", true)]
+    [InlineData("WC4100", false)]
+    [InlineData("WCNA10", false)]
+    [InlineData("WCN41", false)]
+    public void Validar_FormatoDePlaca(string placa, bool esperado)
+    {
+        _validator.Validate(CrearDtoValido() with { Placa = placa }).IsValid.ShouldBe(esperado);
+    }
+
+    [Fact]
+    public void Validar_FechaFutura_EsRechazada()
+    {
+        // El reloj de prueba está en 2026-11-13 (hora de Colombia).
+        var dto = CrearDtoValido() with { FechaInicial = new DateOnly(2026, 11, 14), FechaFinal = new DateOnly(2026, 11, 15) };
+        var resultado = _validator.Validate(dto);
+        resultado.Errors.ShouldContain(e => e.ErrorMessage.Contains("futura"));
+    }
+
+    [Fact]
+    public void Validar_ValorSobreElTope_EsRechazado()
+    {
+        var dto = CrearDtoValido() with { Gastos = new List<GastoItemDto> { new("ACPM", 200_000_001m) } };
+        _validator.Validate(dto).IsValid.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Validar_SaldoAnteriorNegativo_EsRechazado()
+    {
+        _validator.Validate(CrearDtoValido() with { SaldoAnterior = -1m }).IsValid.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Validar_TextoDemasiadoLargo_EsRechazado()
+    {
+        _validator.Validate(CrearDtoValido() with { Manifiesto = new string('X', 51) }).IsValid.ShouldBeFalse();
     }
 }

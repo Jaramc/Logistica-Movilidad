@@ -1,11 +1,11 @@
+using System.Security.Claims;
 using Shouldly;
-using FluentValidation;
-using FluentValidation.Results;
 using LogisticaBackend.Controllers;
 using LogisticaBackend.Data;
 using LogisticaBackend.Domain.Entities;
 using LogisticaBackend.DTOs;
 using LogisticaBackend.Interfaces;
+using LogisticaBackend.Tests.Soporte;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,11 +15,12 @@ using Xunit;
 
 namespace LogisticaBackend.Tests;
 
+/// <summary>Pruebas unitarias del controlador (la validación y la autorización se prueban en integración).</summary>
 public class PlanillasControllerTests
 {
+    private static readonly Guid UsuarioId = Guid.NewGuid();
     private readonly Mock<IPlanillaOcrService> _ocrServiceMock = new();
     private readonly Mock<IExcelExportService> _excelServiceMock = new();
-    private readonly Mock<IValidator<GuardarPlanillaDto>> _validatorMock = new();
     private readonly Mock<ILogger<PlanillasController>> _loggerMock = new();
 
     private (PlanillasController Controller, AppDbContext Context) CrearControllerConDb()
@@ -29,150 +30,66 @@ public class PlanillasControllerTests
             .Options;
         var context = new AppDbContext(options);
 
+        var usuario = new ClaimsPrincipal(new ClaimsIdentity(
+            new[] { new Claim(ClaimTypes.NameIdentifier, UsuarioId.ToString()) }, "Prueba"));
+
         var controller = new PlanillasController(
             _ocrServiceMock.Object,
             _excelServiceMock.Object,
-            _validatorMock.Object,
-            _loggerMock.Object,
-            context
+            context,
+            new RelojFijo(new DateTimeOffset(2026, 11, 13, 15, 0, 0, TimeSpan.Zero)),
+            _loggerMock.Object
         )
         {
             ControllerContext = new ControllerContext
             {
-                HttpContext = new DefaultHttpContext()
+                HttpContext = new DefaultHttpContext { User = usuario }
             }
         };
 
         return (controller, context);
     }
 
-    [Fact]
-    public async Task GuardarPlanilla_DiferenciaEnTotalesMayorAUnCentavo_Retorna422ProblemDetails()
-    {
-        var (controller, _) = CrearControllerConDb();
-
-        // Total gastos enviado: 2.869.200, pero gastos reales suman: 1.000.000 (Diferencia > 0.01)
-        var dto = new GuardarPlanillaDto(
-            Placa: "WCN410",
-            Conductor: "PEDRO PEREZ",
-            Origen: "BOGOTA",
-            Destino: "MEDELLIN",
-            FechaInicial: new DateOnly(2026, 11, 1),
-            FechaFinal: new DateOnly(2026, 11, 5),
-            Flete: 6976800m,
-            Anticipo: 2800000m,
-            TotalGastos: 2869200m, // Difiere deliberadamente de la suma de renglones
-            SaldoViaje: 69200m,
-            SaldoAnterior: 0m,
-            SaldoTotal: 69200m,
-            Gastos: new List<GastoItemDto>
-            {
-                new("PARQUEO", 1000000m) // Solo suma 1.000.000
-            },
-            Manifiesto: "MAN-1",
-            EmpresaTransportadora: "LOGISTICA"
-        );
-
-        _validatorMock.Setup(v => v.ValidateAsync(dto, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ValidationResult());
-
-        var result = await controller.GuardarPlanilla(dto, CancellationToken.None);
-
-        result.ShouldBeOfType<ObjectResult>();
-        var objResult = (ObjectResult)result;
-        objResult.StatusCode.ShouldBe(StatusCodes.Status422UnprocessableEntity);
-        objResult.Value.ShouldBeOfType<ProblemDetails>();
-
-        var problemDetails = (ProblemDetails)objResult.Value!;
-        problemDetails.Title.ShouldBe("Discrepancia en Totales Contables");
-        problemDetails.Detail!.ShouldContain("TotalGastos", Case.Sensitive);
-    }
+    private static GuardarPlanillaDto DtoPlanillaReal() => new(
+        Placa: "wcn-410",
+        Conductor: "PEDRO PEREZ",
+        Origen: "BOGOTA",
+        Destino: "MEDELLIN",
+        FechaInicial: new DateOnly(2026, 11, 1),
+        FechaFinal: new DateOnly(2026, 11, 5),
+        Manifiesto: "MAN-1234",
+        EmpresaTransportadora: "LOGISTICA S.A.S.",
+        Flete: 6976800m,
+        Anticipo: 2800000m,
+        SaldoAnterior: 0m,
+        Gastos: new List<GastoItemDto>
+        {
+            new("PARQUEO", 178000m),
+            new("PAPELERIA", 32900m),
+            new("PEAJES", 1500000m),
+            new("ACPM", 1158300m)
+        }
+    );
 
     [Fact]
-    public async Task GuardarPlanilla_DatosValidosYTotalesCuadrados_PersisteEnBaseDeDatosYRetorna201()
+    public async Task GuardarPlanilla_RecalculaTotalesEnServidorYAsignaAutoria()
     {
         var (controller, context) = CrearControllerConDb();
 
-        var dto = new GuardarPlanillaDto(
-            Placa: "WCN410",
-            Conductor: "PEDRO PEREZ",
-            Origen: "BOGOTA",
-            Destino: "MEDELLIN",
-            FechaInicial: new DateOnly(2026, 11, 1),
-            FechaFinal: new DateOnly(2026, 11, 5),
-            Flete: 6976800m,
-            Anticipo: 2800000m,
-            TotalGastos: 2869200m,
-            SaldoViaje: 69200m,
-            SaldoAnterior: 0m,
-            SaldoTotal: 69200m,
-            Gastos: new List<GastoItemDto>
-            {
-                new("PARQUEO", 178000m),
-                new("PAPELERIA", 32900m),
-                new("PEAJES", 1500000m),
-                new("ACPM", 1158300m)
-            },
-            Manifiesto: "MAN-1234",
-            EmpresaTransportadora: "LOGISTICA S.A.S."
-        );
+        var result = await controller.GuardarPlanilla(DtoPlanillaReal(), CancellationToken.None);
 
-        _validatorMock.Setup(v => v.ValidateAsync(dto, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ValidationResult());
+        var created = result.ShouldBeOfType<CreatedAtActionResult>();
+        created.StatusCode.ShouldBe(StatusCodes.Status201Created);
 
-        var result = await controller.GuardarPlanilla(dto, CancellationToken.None);
-
-        result.ShouldBeOfType<CreatedAtActionResult>();
-        var createdResult = (CreatedAtActionResult)result;
-        createdResult.StatusCode.ShouldBe(StatusCodes.Status201Created);
-
-        // Verificar que realmente se persistió en el contexto
-        var planillaEnDb = await context.Planillas.Include(p => p.Gastos).FirstOrDefaultAsync(p => p.Placa == "WCN410");
-        planillaEnDb.ShouldNotBeNull();
-        planillaEnDb!.Placa.ShouldBe("WCN410");
-        planillaEnDb.Gastos.Count().ShouldBe(4);
-    }
-
-    [Fact]
-    public async Task GuardarPlanilla_ValidacionFalla_Retorna422UnprocessableEntity()
-    {
-        var (controller, _) = CrearControllerConDb();
-
-        var dto = new GuardarPlanillaDto(
-            Placa: "", // Invalida
-            Conductor: "",
-            Origen: "",
-            Destino: "",
-            FechaInicial: DateOnly.MinValue,
-            FechaFinal: DateOnly.MinValue,
-            Flete: 0,
-            Anticipo: 0,
-            TotalGastos: 0,
-            SaldoViaje: 0,
-            SaldoAnterior: 0,
-            SaldoTotal: 0,
-            Gastos: new List<GastoItemDto>(),
-            Manifiesto: null,
-            EmpresaTransportadora: null
-        );
-
-        var failures = new List<ValidationFailure>
-        {
-            new("Placa", "La placa es obligatoria"),
-            new("Conductor", "El conductor es obligatorio")
-        };
-
-        _validatorMock.Setup(v => v.ValidateAsync(dto, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ValidationResult(failures));
-
-        var result = await controller.GuardarPlanilla(dto, CancellationToken.None);
-
-        result.ShouldBeOfType<ObjectResult>();
-        var objResult = (ObjectResult)result;
-        objResult.StatusCode.ShouldBe(StatusCodes.Status422UnprocessableEntity);
-
-        var problem = objResult.Value.ShouldBeOfType<ProblemDetails>();
-        problem.Title.ShouldBe("Error de Validación de Formulario");
+        var planilla = await context.Planillas.Include(p => p.Gastos).SingleAsync();
+        planilla.Placa.ShouldBe("WCN410"); // normalizada
+        planilla.TotalGastos.ShouldBe(2869200m);
+        planilla.SaldoViaje.ShouldBe(69200m);
+        planilla.SaldoTotal.ShouldBe(69200m);
+        planilla.Gastos.Count.ShouldBe(4);
+        planilla.CreadoPorUsuarioId.ShouldBe(UsuarioId);
+        planilla.RevisadoPorUsuarioId.ShouldBe(UsuarioId);
+        planilla.EstadoRevision.ShouldBe(EstadoRevision.Aprobado);
     }
 
     [Fact]
@@ -182,37 +99,35 @@ public class PlanillasControllerTests
 
         var result = await controller.ObtenerPlanillaPorId(999, CancellationToken.None);
 
-        result.ShouldBeOfType<NotFoundObjectResult>();
+        var obj = result.ShouldBeOfType<ObjectResult>();
+        obj.StatusCode.ShouldBe(StatusCodes.Status404NotFound);
     }
 
     [Fact]
-    public async Task ObtenerHistorial_RetornaPaginadoCorrectamente()
+    public async Task ObtenerHistorial_FiltraPorPlacaYPagina()
     {
         var (controller, context) = CrearControllerConDb();
-
-        // Agregamos planillas de prueba
-        context.Planillas.Add(new PlanillaViaje
+        foreach (var placa in new[] { "ABC123", "ABC124", "XYZ999" })
         {
-            Placa = "ABC123",
-            Origen = "BOGOTA",
-            Destino = "CALI",
-            FechaInicial = new DateOnly(2026, 11, 1),
-            FechaFinal = new DateOnly(2026, 11, 5),
-            Flete = 1000m,
-            Anticipo = 500m,
-            TotalGastos = 400m,
-            SaldoViaje = -100m,
-            SaldoTotal = -100m,
-            EstadoRevision = EstadoRevision.Aprobado,
-            CreadoEn = DateTime.UtcNow
-        });
+            context.Planillas.Add(new PlanillaViaje
+            {
+                Placa = placa,
+                Conductor = "JUAN",
+                FechaInicial = new DateOnly(2026, 11, 1),
+                FechaFinal = new DateOnly(2026, 11, 5),
+                EstadoRevision = EstadoRevision.Aprobado,
+            });
+        }
         await context.SaveChangesAsync();
 
-        var result = await controller.ObtenerHistorial(page: 1, pageSize: 10, CancellationToken.None);
+        var result = await controller.ObtenerHistorial(
+            new ConsultaPlanillasDto { Pagina = 1, Tamano = 1, Placa = "abc" }, CancellationToken.None);
 
-        result.ShouldBeOfType<OkObjectResult>();
-        var okResult = (OkObjectResult)result;
-        okResult.Value.ShouldNotBeNull();
+        var ok = result.ShouldBeOfType<OkObjectResult>();
+        var pagina = ok.Value.ShouldBeOfType<PagedResultDto<PlanillaResumenDto>>();
+        pagina.TotalCount.ShouldBe(2);
+        pagina.Items.Count.ShouldBe(1);
+        pagina.TotalPages.ShouldBe(2);
     }
 
     [Fact]
@@ -222,14 +137,13 @@ public class PlanillasControllerTests
 
         var result = controller.ObtenerCatalogoConceptos();
 
-        result.ShouldBeOfType<OkObjectResult>();
-        var okResult = (OkObjectResult)result;
+        var okResult = result.ShouldBeOfType<OkObjectResult>();
         var list = okResult.Value as IReadOnlyList<ConceptoCanonicoDto>;
         list.ShouldNotBeNull();
-        list.Count().ShouldBe(16);
-        list!.Select(c => c.Nombre).ShouldContain("PEAJES");
-        list!.Select(c => c.Nombre).ShouldContain("ACPM");
-        list!.Select(c => c.Nombre).ShouldContain("OTROS");
+        list.Count.ShouldBe(16);
+        list.Select(c => c.Nombre).ShouldContain("PEAJES");
+        list.Select(c => c.Nombre).ShouldContain("ACPM");
+        list.Select(c => c.Nombre).ShouldContain("OTROS");
     }
 
     [Fact]
@@ -240,11 +154,11 @@ public class PlanillasControllerTests
         _excelServiceMock.Setup(e => e.GenerarConsolidadoExcelAsync(It.IsAny<DateOnly?>(), It.IsAny<DateOnly?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new MemoryStream(new byte[] { 1, 2, 3 }));
 
-        var result = await controller.DescargarConsolidado(new RangoFechasDescargaDto { Desde = new DateOnly(2026, 1, 1), Hasta = new DateOnly(2026, 6, 30) }, CancellationToken.None);
+        var result = await controller.DescargarConsolidado(
+            new RangoFechasDescargaDto { Desde = new DateOnly(2026, 1, 1), Hasta = new DateOnly(2026, 6, 30) }, CancellationToken.None);
 
-        result.ShouldBeOfType<FileStreamResult>();
-        var fileResult = (FileStreamResult)result;
+        var fileResult = result.ShouldBeOfType<FileStreamResult>();
         fileResult.ContentType.ShouldBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        fileResult.FileDownloadName.ShouldContain("Consolidado_Planillas");
+        fileResult.FileDownloadName.ShouldBe("Consolidado_Planillas_20260101_20260630.xlsx");
     }
 }

@@ -33,8 +33,6 @@ public record ResultadoCalculo(
 /// </summary>
 public static class CalculadoraLiquidacion
 {
-    public const decimal ToleranciaMaxima = 0.01m;
-
     /// <summary>
     /// Calcula de manera determinista los totales contables de una planilla.
     /// Redondeo estricto MidpointRounding.AwayFromZero a dos decimales.
@@ -67,39 +65,6 @@ public static class CalculadoraLiquidacion
         decimal saldoTotal = Redondear(saldoViaje + saldoAnteriorRedondeado);
 
         return new ResultadoCalculo(totalGastos, saldoViaje, saldoTotal);
-    }
-
-    /// <summary>
-    /// Valida si los totales enviados por el cliente coinciden con el cálculo autoritativo del backend.
-    /// </summary>
-    public static (bool EsValido, string? MensajeError, ResultadoCalculo Esperado) ValidarTotalesEnviados(
-        GuardarPlanillaDto dto,
-        FormulaSaldoViaje formula = FormulaSaldoViaje.BalanceAnticipo)
-    {
-        var esperado = Calcular(
-            dto.Flete,
-            dto.Anticipo,
-            dto.Gastos.Select(g => g.Valor),
-            dto.SaldoAnterior,
-            formula
-        );
-
-        if (Math.Abs(dto.TotalGastos - esperado.TotalGastos) > ToleranciaMaxima)
-        {
-            return (false, $"Discrepancia en TotalGastos: Enviado={dto.TotalGastos:F2}, Calculado={esperado.TotalGastos:F2}.", esperado);
-        }
-
-        if (Math.Abs(dto.SaldoViaje - esperado.SaldoViaje) > ToleranciaMaxima)
-        {
-            return (false, $"Discrepancia en SaldoViaje: Enviado={dto.SaldoViaje:F2}, Calculado={esperado.SaldoViaje:F2}.", esperado);
-        }
-
-        if (Math.Abs(dto.SaldoTotal - esperado.SaldoTotal) > ToleranciaMaxima)
-        {
-            return (false, $"Discrepancia en SaldoTotal: Enviado={dto.SaldoTotal:F2}, Calculado={esperado.SaldoTotal:F2}.", esperado);
-        }
-
-        return (true, null, esperado);
     }
 
     public static decimal Redondear(decimal valor)

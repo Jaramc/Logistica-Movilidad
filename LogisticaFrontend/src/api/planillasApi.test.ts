@@ -92,10 +92,7 @@ describe('planillasApi.ts - Rutas Canónicas del Backend', () => {
         fechaFinal: '2026-11-05',
         flete: 6976800,
         anticipo: 2800000,
-        totalGastos: 2869200,
-        saldoViaje: 69200,
         saldoAnterior: 0,
-        saldoTotal: 69200,
         gastos: [
           { concepto: 'PARQUEO', valor: 178000 }
         ]
@@ -105,6 +102,12 @@ describe('planillasApi.ts - Rutas Canónicas del Backend', () => {
       expect(capturedUrl).toContain('/api/planillas');
       expect(capturedMethod).toBe('POST');
       expect(JSON.parse(capturedBody).placa).toBe('TLX890');
+      // Los totales nunca se envían: el servidor los calcula.
+      const enviado = JSON.parse(capturedBody);
+      expect(enviado).not.toHaveProperty('totalGastos');
+      expect(enviado).not.toHaveProperty('saldoViaje');
+      expect(enviado).not.toHaveProperty('saldoTotal');
+      expect(enviado).not.toHaveProperty('id');
       expect(res.id).toBe(42);
     });
   });
@@ -128,14 +131,14 @@ describe('planillasApi.ts - Rutas Canónicas del Backend', () => {
         };
       });
 
-      const blob = await descargarConsolidadoApi();
-      expect(capturedUrl).toContain('/api/planillas/descargar-consolidado');
+      const blob = await descargarConsolidadoApi({ desde: '2026-01-01', hasta: '2026-06-30' });
+      expect(capturedUrl).toBe('/api/planillas/descargar-consolidado?desde=2026-01-01&hasta=2026-06-30');
       expect(blob.size).toBeGreaterThan(0);
     });
   });
 
   describe('obtenerHistorialApi', () => {
-    it('llama a GET /api/planillas?page=1&pageSize=20 y parsea PagedPlanillas', async () => {
+    it('llama a GET /api/planillas?pagina=1&tamano=20 con filtros y parsea PagedPlanillas', async () => {
       let capturedUrl = '';
 
       globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
@@ -145,8 +148,6 @@ describe('planillasApi.ts - Rutas Canónicas del Backend', () => {
           status: 200,
           headers: new Headers({ 'content-type': 'application/json' }),
           json: async () => ({
-            mensaje: 'Historial consultado exitosamente.',
-            data: {
               items: [
                 {
                   id: 1,
@@ -166,13 +167,12 @@ describe('planillasApi.ts - Rutas Canónicas del Backend', () => {
               page: 1,
               pageSize: 20,
               totalPages: 1
-            }
           }),
         };
       });
 
-      const res = await obtenerHistorialApi(1, 20);
-      expect(capturedUrl).toContain('/api/planillas?page=1&pageSize=20');
+      const res = await obtenerHistorialApi(1, 20, { placa: 'WCN410', conductor: '' });
+      expect(capturedUrl).toBe('/api/planillas?pagina=1&tamano=20&placa=WCN410');
       expect(res.items).toHaveLength(1);
       expect(res.items[0]!.placa).toBe('WCN410');
       expect(res.totalItems).toBe(1);

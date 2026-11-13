@@ -1,8 +1,9 @@
 namespace LogisticaBackend.DTOs;
 
 /// <summary>
-/// DTO de Comando estricto para Guardar/Aprobar Planilla en PostgreSQL (Anti-Overposting).
-/// Excluye Id, CreadoEn, ActualizadoEn y EstadoRevision (manejados por el servidor).
+/// Comando para guardar/aprobar una planilla (anti-overposting).
+/// No incluye Id, EstadoRevision, CreadoEn, autoría ni totales: el servidor los asigna y
+/// recalcula. Cualquier campo extra en el JSON (id, totalGastos, ...) se ignora.
 /// </summary>
 public record GuardarPlanillaDto(
     string Placa,
@@ -15,18 +16,28 @@ public record GuardarPlanillaDto(
     string? EmpresaTransportadora,
     decimal Flete,
     decimal Anticipo,
-    decimal TotalGastos,
-    decimal SaldoViaje,
     decimal SaldoAnterior,
-    decimal SaldoTotal,
     List<GastoItemDto> Gastos
 );
 
-/// <summary>
-/// Renglón individual de gasto enviado por el formulario dinámico del frontend.
-/// </summary>
+/// <summary>Renglón de gasto enviado por el formulario.</summary>
 public record GastoItemDto(
     string Concepto,
     decimal Valor
 );
 
+/// <summary>Respuesta de guardar: la planilla tal como quedó con los totales del servidor.</summary>
+public record PlanillaGuardadaDto(string Mensaje, int Id, PlanillaDetalleDto Data);
+
+/// <summary>Filtros y paginación del historial. Tamaño máximo de página: 100.</summary>
+public sealed class ConsultaPlanillasDto
+{
+    public const int TamanoMaximo = 100;
+
+    public int Pagina { get; init; } = 1;
+    public int Tamano { get; init; } = 20;
+    public DateOnly? Desde { get; init; }
+    public DateOnly? Hasta { get; init; }
+    public string? Placa { get; init; }
+    public string? Conductor { get; init; }
+}

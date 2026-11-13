@@ -58,77 +58,75 @@ export async function extraerPlanillaOcrApi(
   return parseResult.data;
 }
 
+/** Respuesta de guardar: totales calculados por el servidor. */
+export interface PlanillaGuardada {
+  mensaje: string;
+  id: number;
+  data: { placa: string; totalGastos: number; saldoViaje: number; saldoTotal: number };
+}
+
 /**
  * 2. Guardar Planilla Aprobada en Base de Datos
- * Ruta canónica: POST /api/planillas con GuardarPlanillaDto
+ * Ruta: POST /api/planillas. No se envían totales: el servidor los calcula.
  */
 export async function guardarPlanillaApi(
   dto: GuardarPlanillaDto,
   signal?: AbortSignal
-): Promise<{ mensaje: string; id: number; placa?: string; saldoViaje?: number }> {
-  return await apiClient<{ mensaje: string; id: number; placa?: string; saldoViaje?: number }>(
-    '/api/planillas',
-    {
-      method: 'POST',
-      body: dto,
-      signal,
-    }
-  );
+): Promise<PlanillaGuardada> {
+  return await apiClient<PlanillaGuardada>('/api/planillas', {
+    method: 'POST',
+    body: dto,
+    signal,
+  });
+}
+
+export interface RangoFechas {
+  /** Formato yyyy-MM-dd */
+  desde: string;
+  hasta: string;
 }
 
 /**
- * 3. Descarga de Consolidado Excel
- * Ruta canónica: GET /api/planillas/descargar-consolidado
+ * 3. Descarga de Consolidado Excel (solo Administrador)
+ * Ruta: GET /api/planillas/descargar-consolidado?desde=&hasta= (máximo 1 año)
  */
-export async function descargarConsolidadoApi(signal?: AbortSignal): Promise<Blob> {
-  return await apiClient<Blob>('/api/planillas/descargar-consolidado', {
+export async function descargarConsolidadoApi(rango: RangoFechas, signal?: AbortSignal): Promise<Blob> {
+  const params = new URLSearchParams({ desde: rango.desde, hasta: rango.hasta });
+  return await apiClient<Blob>(`/api/planillas/descargar-consolidado?${params.toString()}`, {
     method: 'GET',
     signal,
   });
 }
 
+export interface FiltrosHistorial {
+  desde?: string;
+  hasta?: string;
+  placa?: string;
+  conductor?: string;
+}
+
 /**
- * 4. Obtener Historial Paginado de Planillas Registradas
- * Ruta canónica: GET /api/planillas?page={page}&pageSize={pageSize}
+ * 4. Historial paginado
+ * Ruta: GET /api/planillas?pagina=&tamano=&desde=&hasta=&placa=&conductor= (tamano máximo 100)
  */
 export async function obtenerHistorialApi(
-  page: number = 1,
-  pageSize: number = 20,
+  pagina: number = 1,
+  tamano: number = 20,
+  filtros: FiltrosHistorial = {},
   signal?: AbortSignal
 ): Promise<PagedPlanillas> {
-  const rawResponse = await apiClient<unknown>(
-    `/api/planillas?page=${page}&pageSize=${pageSize}`,
-    {
-      method: 'GET',
-      signal,
-    }
-  );
+  const params = new URLSearchParams({ pagina: String(pagina), tamano: String(tamano) });
+  for (const [clave, valor] of Object.entries(filtros)) {
+    if (valor) params.set(clave, valor);
+  }
 
-  const payload = (rawResponse as any)?.data ?? rawResponse;
-  const parseResult = PagedPlanillasSchema.safeParse(payload);
+  const rawResponse = await apiClient<unknown>(`/api/planillas?${params.toString()}`, {
+    method: 'GET',
+    signal,
+  });
+
+  const parseResult = PagedPlanillasSchema.safeParse(rawResponse);
   if (!parseResult.success) {
-    // Tolerancia ante arrays planos legacy o variaciones
-    if (Array.isArray(payload)) {
-      return {
-        items: payload.map((item: any) => ({
-          id: Number(item.id ?? 0),
-          numeroPlanilla: item.numeroPlanilla ?? null,
-          placa: String(item.placa ?? 'N/A'),
-          conductor: item.conductor ?? null,
-          origen: String(item.origen ?? item.origenViaje ?? 'N/A'),
-          destino: String(item.destino ?? 'N/A'),
-          fechaViaje: item.fechaViaje ?? null,
-          totalGastos: Number(item.totalGastos ?? 0),
-          saldoViaje: Number(item.saldoViaje ?? 0),
-          estado: String(item.estado ?? item.estadoRevision ?? 'Aprobado'),
-        })),
-        totalItems: payload.length,
-        totalCount: payload.length,
-        page: 1,
-        pageSize: payload.length || 20,
-        totalPages: 1,
-      };
-    }
     throw new Error('Estructura de respuesta no válida al consultar historial de planillas');
   }
 

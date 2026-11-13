@@ -22,6 +22,8 @@ public record PlanillaDetalleDto(
     string EstadoRevision,
     DateTime CreadoEn,
     DateTime ActualizadoEn,
+    Guid? CreadoPorUsuarioId,
+    Guid? RevisadoPorUsuarioId,
     List<GastoDetalleRespuestaDto> Gastos
 );
 

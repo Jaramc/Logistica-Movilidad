@@ -1,9 +1,8 @@
-using FluentValidation;
-using LogisticaBackend.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using LogisticaBackend.Auth;
 using LogisticaBackend.Data;
 using LogisticaBackend.Domain.Entities;
 using LogisticaBackend.Domain.Services;
@@ -21,26 +20,25 @@ public class PlanillasController : ControllerBase
     private readonly IPlanillaOcrService _ocrService;
     private readonly IExcelExportService _excelService;
     private readonly AppDbContext _context;
-    private readonly IValidator<GuardarPlanillaDto> _validator;
+    private readonly TimeProvider _reloj;
     private readonly ILogger<PlanillasController> _logger;
 
     public PlanillasController(
         IPlanillaOcrService ocrService,
         IExcelExportService excelService,
-        IValidator<GuardarPlanillaDto> validator,
-        ILogger<PlanillasController> logger,
-        AppDbContext context)
+        AppDbContext context,
+        TimeProvider reloj,
+        ILogger<PlanillasController> logger)
     {
         _ocrService = ocrService ?? throw new ArgumentNullException(nameof(ocrService));
         _excelService = excelService ?? throw new ArgumentNullException(nameof(excelService));
-        _validator = validator ?? throw new ArgumentNullException(nameof(validator));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _reloj = reloj ?? throw new ArgumentNullException(nameof(reloj));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <summary>
-    /// Extrae información estructurada de una planilla de transporte físico mediante Azure AI Document Intelligence.
-    /// No depende de la disponibilidad de la base de datos PostgreSQL.
+    /// Extrae los datos de una planilla física con Azure AI Document Intelligence.
     /// </summary>
     [HttpPost("extraer")]
     [Authorize(Policy = Politicas.PuedeRevisar)]
@@ -55,7 +53,7 @@ public class PlanillasController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status502BadGateway)]
     public async Task<IActionResult> ExtraerDatos(IFormFile? file, CancellationToken cancellationToken)
     {
-        // 1. Validación de tamaño y Magic Bytes en memoria
+        // Tamaño, extensión, MIME y magic bytes, en memoria.
         var validacion = await FileValidationService.ValidarArchivoAsync(file, cancellationToken);
         if (!validacion.EsValido)
         {
@@ -63,16 +61,9 @@ public class PlanillasController : ControllerBase
                 ? StatusCodes.Status413PayloadTooLarge
                 : StatusCodes.Status415UnsupportedMediaType;
 
-            return StatusCode(status, new ProblemDetails
-            {
-                Status = status,
-                Title = "Archivo no admitido",
-                Detail = validacion.MensajeError,
-                Instance = HttpContext.Request.Path
-            });
+            return Problem(statusCode: status, title: "Archivo no admitido", detail: validacion.MensajeError);
         }
 
-        // 2. Procesamiento OCR en memoria como Stream sin almacenamiento en disco
         using var stream = file!.OpenReadStream();
         var resultado = await _ocrService.ProcesarPlanillaAsync(stream, cancellationToken);
 
@@ -80,82 +71,27 @@ public class PlanillasController : ControllerBase
     }
 
     /// <summary>
-    /// Aprueba y persiste la liquidación definitiva en PostgreSQL con relación 1:N a GastoDetalle.
-    /// Recalcula autoritativamente los totales y rechaza inconsistencias mayores a 0.01.
+    /// Aprueba y guarda la planilla. Los totales SIEMPRE los calcula el servidor con decimal;
+    /// cualquier total enviado por el cliente se ignora. La autoría sale de la sesión.
     /// </summary>
     [HttpPost]
     [Authorize(Policy = Politicas.PuedeRevisar)]
     [Consumes("application/json")]
-    [ProducesResponseType(StatusCodes.Status201Created)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
+    [ProducesResponseType(typeof(PlanillaGuardadaDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<IActionResult> GuardarPlanilla(
         [FromBody] GuardarPlanillaDto dto,
         CancellationToken cancellationToken)
     {
-        if (dto == null)
-        {
-            return BadRequest(new ProblemDetails
-            {
-                Status = StatusCodes.Status400BadRequest,
-                Title = "Payload Inválido",
-                Detail = "No se recibieron datos de la planilla.",
-                Instance = HttpContext.Request.Path
-            });
-        }
+        var usuarioId = IdUsuarioActual();
+        var calculo = CalculadoraLiquidacion.Calcular(
+            dto.Flete, dto.Anticipo, dto.Gastos.Select(g => g.Valor), dto.SaldoAnterior);
+        var ahora = _reloj.GetUtcNow().UtcDateTime;
 
-        // 1. Validación de reglas de entrada con FluentValidation
-        var validacionFluent = await _validator.ValidateAsync(dto, cancellationToken);
-        if (!validacionFluent.IsValid)
-        {
-            var errors = validacionFluent.Errors
-                .GroupBy(e => e.PropertyName)
-                .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage).ToArray());
-
-            return StatusCode(StatusCodes.Status422UnprocessableEntity, new ProblemDetails
-            {
-                Status = StatusCodes.Status422UnprocessableEntity,
-                Title = "Error de Validación de Formulario",
-                Detail = "Uno o más campos no cumplen con las reglas del negocio.",
-                Instance = HttpContext.Request.Path,
-                Extensions = { ["errors"] = errors }
-            });
-        }
-
-        // 2. Validación autoritativa de totales y saldos (Zona Crítica Contable)
-        var (esValido, mensajeError, esperado) = CalculadoraLiquidacion.ValidarTotalesEnviados(dto);
-        if (!esValido)
-        {
-            _logger.LogWarning("Rechazo 422 por discrepancia contable. {Detalle}", mensajeError);
-            return StatusCode(StatusCodes.Status422UnprocessableEntity, new ProblemDetails
-            {
-                Status = StatusCodes.Status422UnprocessableEntity,
-                Title = "Discrepancia en Totales Contables",
-                Detail = mensajeError,
-                Instance = HttpContext.Request.Path,
-                Extensions =
-                {
-                    ["valoresEsperados"] = new
-                    {
-                        totalGastos = esperado.TotalGastos,
-                        saldoViaje = esperado.SaldoViaje,
-                        saldoTotal = esperado.SaldoTotal
-                    },
-                    ["valoresRecibidos"] = new
-                    {
-                        totalGastos = dto.TotalGastos,
-                        saldoViaje = dto.SaldoViaje,
-                        saldoTotal = dto.SaldoTotal
-                    }
-                }
-            });
-        }
-
-
-        // 4. Mapeo explícito a entidad de dominio (Anti-Overposting)
+        // Mapeo explícito: solo se copian los campos permitidos (anti-overposting).
         var entidad = new PlanillaViaje
         {
-            Placa = dto.Placa.Trim().ToUpperInvariant(),
+            Placa = Placa.Normalizar(dto.Placa),
             Conductor = dto.Conductor.Trim(),
             Origen = dto.Origen.Trim(),
             Destino = dto.Destino.Trim(),
@@ -165,13 +101,15 @@ public class PlanillasController : ControllerBase
             EmpresaTransportadora = string.IsNullOrWhiteSpace(dto.EmpresaTransportadora) ? null : dto.EmpresaTransportadora.Trim(),
             Flete = CalculadoraLiquidacion.Redondear(dto.Flete),
             Anticipo = CalculadoraLiquidacion.Redondear(dto.Anticipo),
-            TotalGastos = esperado.TotalGastos,
-            SaldoViaje = esperado.SaldoViaje,
             SaldoAnterior = CalculadoraLiquidacion.Redondear(dto.SaldoAnterior),
-            SaldoTotal = esperado.SaldoTotal,
+            TotalGastos = calculo.TotalGastos,
+            SaldoViaje = calculo.SaldoViaje,
+            SaldoTotal = calculo.SaldoTotal,
             EstadoRevision = EstadoRevision.Aprobado,
-            CreadoEn = DateTime.UtcNow,
-            ActualizadoEn = DateTime.UtcNow,
+            CreadoPorUsuarioId = usuarioId,
+            RevisadoPorUsuarioId = usuarioId,
+            CreadoEn = ahora,
+            ActualizadoEn = ahora,
             Gastos = dto.Gastos.Select((g, idx) => new GastoDetalle
             {
                 Concepto = g.Concepto.Trim(),
@@ -184,114 +122,60 @@ public class PlanillasController : ControllerBase
         await _context.Planillas.AddAsync(entidad, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Planilla #{Id} aprobada y persistida exitosamente para el vehículo {Placa}.", entidad.Id, entidad.Placa);
-
-        var respuestaData = new PlanillaDetalleDto(
-            Id: entidad.Id,
-            Placa: entidad.Placa,
-            Conductor: entidad.Conductor,
-            Origen: entidad.Origen,
-            Destino: entidad.Destino,
-            FechaInicial: entidad.FechaInicial,
-            FechaFinal: entidad.FechaFinal,
-            Manifiesto: entidad.Manifiesto,
-            EmpresaTransportadora: entidad.EmpresaTransportadora,
-            Flete: entidad.Flete,
-            Anticipo: entidad.Anticipo,
-            TotalGastos: entidad.TotalGastos,
-            SaldoViaje: entidad.SaldoViaje,
-            SaldoAnterior: entidad.SaldoAnterior,
-            SaldoTotal: entidad.SaldoTotal,
-            EstadoRevision: entidad.EstadoRevision.ToString(),
-            CreadoEn: entidad.CreadoEn,
-            ActualizadoEn: entidad.ActualizadoEn,
-            Gastos: entidad.Gastos.Select(g => new GastoDetalleRespuestaDto(
-                Id: g.Id,
-                Concepto: g.Concepto,
-                ConceptoCanonico: g.ConceptoCanonico,
-                Valor: g.Valor,
-                Orden: g.Orden
-            )).ToList()
-        );
+        _logger.LogInformation("Planilla {Id} guardada por el usuario {UsuarioId}.", entidad.Id, usuarioId);
 
         return CreatedAtAction(
             nameof(ObtenerPlanillaPorId),
             new { id = entidad.Id },
-            new
-            {
-                mensaje = "Planilla aprobada y guardada exitosamente en la base de datos.",
-                id = entidad.Id,
-                data = respuestaData
-            }
-        );
+            new PlanillaGuardadaDto("Planilla aprobada y guardada.", entidad.Id, ADetalle(entidad)));
     }
 
-    /// <summary>
-    /// Consulta el historial paginado de planillas aprobadas.
-    /// </summary>
+    /// <summary>Historial paginado (máximo 100 por página) con filtros por fechas, placa y conductor.</summary>
     [HttpGet]
     [Authorize(Policy = Politicas.PuedeLeer)]
     [ProducesResponseType(typeof(PagedResultDto<PlanillaResumenDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> ObtenerHistorial(
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 50,
+        [FromQuery] ConsultaPlanillasDto consulta,
         CancellationToken cancellationToken = default)
     {
+        var query = _context.Planillas.AsNoTracking();
 
-        page = Math.Max(1, page);
-        pageSize = Math.Clamp(pageSize, 1, 100);
+        if (consulta.Desde is { } desde) query = query.Where(p => p.FechaInicial >= desde);
+        if (consulta.Hasta is { } hasta) query = query.Where(p => p.FechaInicial <= hasta);
+        if (!string.IsNullOrWhiteSpace(consulta.Placa))
+        {
+            var placa = Placa.Normalizar(consulta.Placa);
+            query = query.Where(p => p.Placa.StartsWith(placa));
+        }
+        if (!string.IsNullOrWhiteSpace(consulta.Conductor))
+        {
+            var conductor = consulta.Conductor.Trim().ToUpper();
+            query = query.Where(p => p.Conductor.ToUpper().Contains(conductor));
+        }
 
-        var totalCount = await _context.Planillas.CountAsync(cancellationToken);
-        var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+        var totalCount = await query.CountAsync(cancellationToken);
+        var totalPages = (int)Math.Ceiling(totalCount / (double)consulta.Tamano);
 
-        var items = await _context.Planillas
-            .AsNoTracking()
+        var items = await query
             .OrderByDescending(p => p.FechaInicial)
             .ThenByDescending(p => p.Id)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .Skip((consulta.Pagina - 1) * consulta.Tamano)
+            .Take(consulta.Tamano)
             .Select(p => new PlanillaResumenDto(
-                p.Id,
-                p.Placa,
-                p.Conductor,
-                p.Origen,
-                p.Destino,
-                p.FechaInicial,
-                p.FechaFinal,
-                p.TotalGastos,
-                p.SaldoViaje,
-                p.SaldoTotal,
-                p.EstadoRevision.ToString(),
-                p.CreadoEn
-            ))
+                p.Id, p.Placa, p.Conductor, p.Origen, p.Destino, p.FechaInicial, p.FechaFinal,
+                p.TotalGastos, p.SaldoViaje, p.SaldoTotal, p.EstadoRevision.ToString(), p.CreadoEn))
             .ToListAsync(cancellationToken);
 
-        var pagedResult = new PagedResultDto<PlanillaResumenDto>(
-            Items: items,
-            TotalCount: totalCount,
-            Page: page,
-            PageSize: pageSize,
-            TotalPages: totalPages
-        );
-
-        return Ok(new
-        {
-            mensaje = "Historial consultado exitosamente.",
-            data = pagedResult
-        });
+        return Ok(new PagedResultDto<PlanillaResumenDto>(items, totalCount, consulta.Pagina, consulta.Tamano, totalPages));
     }
 
-    /// <summary>
-    /// Consulta el detalle individual de una planilla con sus renglones de gastos.
-    /// </summary>
+    /// <summary>Detalle de una planilla con sus renglones de gasto.</summary>
     [HttpGet("{id:int}")]
     [Authorize(Policy = Politicas.PuedeLeer)]
     [ProducesResponseType(typeof(PlanillaDetalleDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ObtenerPlanillaPorId(int id, CancellationToken cancellationToken)
     {
-
         var planilla = await _context.Planillas
             .AsNoTracking()
             .Include(p => p.Gastos.OrderBy(g => g.Orden))
@@ -299,59 +183,23 @@ public class PlanillasController : ControllerBase
 
         if (planilla == null)
         {
-            return NotFound(new ProblemDetails
-            {
-                Status = StatusCodes.Status404NotFound,
-                Title = "Planilla No Encontrada",
-                Detail = $"No se encontró ninguna planilla con el identificador #{id}.",
-                Instance = HttpContext.Request.Path
-            });
+            return Problem(statusCode: StatusCodes.Status404NotFound, title: "Planilla no encontrada",
+                detail: "No existe una planilla con ese identificador.");
         }
 
-        var detalle = new PlanillaDetalleDto(
-            Id: planilla.Id,
-            Placa: planilla.Placa,
-            Conductor: planilla.Conductor,
-            Origen: planilla.Origen,
-            Destino: planilla.Destino,
-            FechaInicial: planilla.FechaInicial,
-            FechaFinal: planilla.FechaFinal,
-            Manifiesto: planilla.Manifiesto,
-            EmpresaTransportadora: planilla.EmpresaTransportadora,
-            Flete: planilla.Flete,
-            Anticipo: planilla.Anticipo,
-            TotalGastos: planilla.TotalGastos,
-            SaldoViaje: planilla.SaldoViaje,
-            SaldoAnterior: planilla.SaldoAnterior,
-            SaldoTotal: planilla.SaldoTotal,
-            EstadoRevision: planilla.EstadoRevision.ToString(),
-            CreadoEn: planilla.CreadoEn,
-            ActualizadoEn: planilla.ActualizadoEn,
-            Gastos: planilla.Gastos.Select(g => new GastoDetalleRespuestaDto(
-                Id: g.Id,
-                Concepto: g.Concepto,
-                ConceptoCanonico: g.ConceptoCanonico,
-                Valor: g.Valor,
-                Orden: g.Orden
-            )).ToList()
-        );
-
-        return Ok(detalle);
+        return Ok(ADetalle(planilla));
     }
 
-    /// <summary>
-    /// Genera y descarga el consolidado en Excel en formato streaming (evitando LOH).
-    /// </summary>
+    /// <summary>Consolidado en Excel para un rango obligatorio de máximo 1 año.</summary>
     [HttpGet("descargar-consolidado")]
     [Authorize(Policy = Politicas.SoloAdministrador)]
     [Produces("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<IActionResult> DescargarConsolidado(
         [FromQuery] RangoFechasDescargaDto rango,
         CancellationToken cancellationToken)
     {
-
         var memoryStream = await _excelService.GenerarConsolidadoExcelAsync(rango.Desde, rango.Hasta, cancellationToken);
 
         return File(
@@ -361,9 +209,7 @@ public class PlanillasController : ControllerBase
         );
     }
 
-    /// <summary>
-    /// Retorna el catálogo canónico de las 16 categorías fijas de gastos para autocompletado del frontend.
-    /// </summary>
+    /// <summary>Catálogo de las 16 categorías canónicas de gasto.</summary>
     [HttpGet("conceptos")]
     [Authorize(Policy = Politicas.PuedeLeer)]
     [ProducesResponseType(typeof(IReadOnlyList<ConceptoCanonicoDto>), StatusCodes.Status200OK)]
@@ -372,5 +218,39 @@ public class PlanillasController : ControllerBase
         return Ok(ConceptoNormalizer.ObtenerCatalogo());
     }
 
-}
+    private Guid? IdUsuarioActual()
+    {
+        var valor = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        return Guid.TryParse(valor, out var id) ? id : null;
+    }
 
+    private static PlanillaDetalleDto ADetalle(PlanillaViaje p) => new(
+        Id: p.Id,
+        Placa: p.Placa,
+        Conductor: p.Conductor,
+        Origen: p.Origen,
+        Destino: p.Destino,
+        FechaInicial: p.FechaInicial,
+        FechaFinal: p.FechaFinal,
+        Manifiesto: p.Manifiesto,
+        EmpresaTransportadora: p.EmpresaTransportadora,
+        Flete: p.Flete,
+        Anticipo: p.Anticipo,
+        TotalGastos: p.TotalGastos,
+        SaldoViaje: p.SaldoViaje,
+        SaldoAnterior: p.SaldoAnterior,
+        SaldoTotal: p.SaldoTotal,
+        EstadoRevision: p.EstadoRevision.ToString(),
+        CreadoEn: p.CreadoEn,
+        ActualizadoEn: p.ActualizadoEn,
+        CreadoPorUsuarioId: p.CreadoPorUsuarioId,
+        RevisadoPorUsuarioId: p.RevisadoPorUsuarioId,
+        Gastos: p.Gastos.OrderBy(g => g.Orden).Select(g => new GastoDetalleRespuestaDto(
+            Id: g.Id,
+            Concepto: g.Concepto,
+            ConceptoCanonico: g.ConceptoCanonico,
+            Valor: g.Valor,
+            Orden: g.Orden
+        )).ToList()
+    );
+}
