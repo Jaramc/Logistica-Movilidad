@@ -41,6 +41,19 @@ public class AuthController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// Entrega la cookie XSRF-TOKEN (legible por JavaScript). El frontend la llama al cargar;
+    /// las respuestas de login, 2FA y logout la renuevan solas porque el token va ligado al usuario.
+    /// </summary>
+    [HttpGet("antiforgery")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public IActionResult Antiforgery()
+    {
+        ConfiguracionAntiforgery.EmitirTokens(HttpContext);
+        return NoContent();
+    }
+
     /// <summary>Primer paso: correo y contraseña. Respuesta idéntica si el usuario no existe, está bloqueado o inactivo.</summary>
     [HttpPost("login")]
     [AllowAnonymous]
@@ -67,6 +80,7 @@ public class AuthController : ControllerBase
         {
             // Solo ocurre si el usuario aún no tiene 2FA: la sesión queda limitada a configurarlo.
             await RegistrarAccesoAsync(usuario);
+            await RenovarTokenCsrfAsync(usuario);
             return Ok(new LoginRespuestaDto(Requiere2fa: false));
         }
 
@@ -121,6 +135,7 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Logout()
     {
         await _signInManager.SignOutAsync();
+        await RenovarTokenCsrfAsync(null);
         return NoContent();
     }
 
@@ -216,6 +231,7 @@ public class AuthController : ControllerBase
         // Nueva sesión, ya con segundo factor.
         await _signInManager.SignInWithClaimsAsync(usuario, isPersistent: false,
             new[] { new Claim(ClaimsSeguridad.Amr, ClaimsSeguridad.AmrMfa) });
+        await RenovarTokenCsrfAsync(usuario);
         _logger.LogInformation("Usuario {UsuarioId} activó 2FA.", usuario.Id);
 
         return Ok(new CodigosRecuperacionDto(codigos));
@@ -242,6 +258,7 @@ public class AuthController : ControllerBase
         if (resultado.Succeeded)
         {
             await RegistrarAccesoAsync(usuario);
+            await RenovarTokenCsrfAsync(usuario);
             return Ok(await CrearUsuarioActualAsync(usuario, sesionConMfa: true));
         }
 
@@ -252,6 +269,18 @@ public class AuthController : ControllerBase
             await HttpContext.SignOutAsync(IdentityConstants.TwoFactorUserIdScheme);
         }
         return CodigoFallido();
+    }
+
+    /// <summary>
+    /// SignInAsync no cambia HttpContext.User en la petición en curso; se reemplaza para que el
+    /// token antiforgery nuevo quede ligado al usuario que acaba de entrar (o a nadie tras el logout).
+    /// </summary>
+    private async Task RenovarTokenCsrfAsync(Usuario? usuario)
+    {
+        HttpContext.User = usuario is null
+            ? new ClaimsPrincipal(new ClaimsIdentity())
+            : await _signInManager.CreateUserPrincipalAsync(usuario);
+        ConfiguracionAntiforgery.EmitirTokens(HttpContext);
     }
 
     private async Task RegistrarAccesoAsync(Usuario usuario)

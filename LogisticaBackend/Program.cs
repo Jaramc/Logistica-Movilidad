@@ -18,7 +18,12 @@ using LogisticaBackend.Validators;
 var builder = WebApplication.CreateBuilder(args);
 
 // 1. Controladores y Swagger
-builder.Services.AddControllers(o => o.Filters.Add<ValidacionFluentFilter>());
+builder.Services.AddControllers(o =>
+{
+    o.Filters.Add<ValidarAntiforgeryFilter>(); // CSRF en todo POST/PUT/PATCH/DELETE
+    o.Filters.Add<ValidacionFluentFilter>();
+});
+builder.Services.AddAntiforgeryLogistica();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
