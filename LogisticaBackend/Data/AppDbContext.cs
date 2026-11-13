@@ -15,6 +15,9 @@ public class AppDbContext : IdentityDbContext<Usuario, IdentityRole<Guid>, Guid>
     public DbSet<PlanillaViaje> Planillas => Set<PlanillaViaje>();
     public DbSet<GastoDetalle> GastosDetalle => Set<GastoDetalle>();
 
+    /// <summary>Solo inserción (ver RegistroAuditoria).</summary>
+    public DbSet<RegistroAuditoria> Auditoria => Set<RegistroAuditoria>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -22,6 +25,7 @@ public class AppDbContext : IdentityDbContext<Usuario, IdentityRole<Guid>, Guid>
         modelBuilder.ApplyConfiguration(new PlanillaViajeConfiguration());
         modelBuilder.ApplyConfiguration(new GastoDetalleConfiguration());
         modelBuilder.ApplyConfiguration(new UsuarioConfiguration());
+        modelBuilder.ApplyConfiguration(new RegistroAuditoriaConfiguration());
 
         // Tablas de Identity con nombres en español y snake_case.
         modelBuilder.Entity<IdentityRole<Guid>>().ToTable("roles");

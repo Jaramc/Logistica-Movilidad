@@ -5,6 +5,7 @@ using LogisticaBackend.Data;
 using LogisticaBackend.Domain.Entities;
 using LogisticaBackend.DTOs;
 using LogisticaBackend.Interfaces;
+using LogisticaBackend.Services;
 using LogisticaBackend.Tests.Soporte;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -22,6 +23,7 @@ public class PlanillasControllerTests
     private readonly Mock<IPlanillaOcrService> _ocrServiceMock = new();
     private readonly Mock<IExcelExportService> _excelServiceMock = new();
     private readonly Mock<ILogger<PlanillasController>> _loggerMock = new();
+    private readonly Mock<IAuditoriaService> _auditoriaMock = new();
 
     private (PlanillasController Controller, AppDbContext Context) CrearControllerConDb()
     {
@@ -38,6 +40,7 @@ public class PlanillasControllerTests
             _excelServiceMock.Object,
             context,
             new RelojFijo(new DateTimeOffset(2026, 11, 13, 15, 0, 0, TimeSpan.Zero)),
+            _auditoriaMock.Object,
             _loggerMock.Object
         )
         {
@@ -90,6 +93,8 @@ public class PlanillasControllerTests
         planilla.CreadoPorUsuarioId.ShouldBe(UsuarioId);
         planilla.RevisadoPorUsuarioId.ShouldBe(UsuarioId);
         planilla.EstadoRevision.ShouldBe(EstadoRevision.Aprobado);
+        _auditoriaMock.Verify(a => a.RegistrarAsync(AccionesAuditoria.PlanillaGuardada, true, UsuarioId, "PlanillaViaje",
+            planilla.Id.ToString(), It.IsAny<object?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -160,5 +165,7 @@ public class PlanillasControllerTests
         var fileResult = result.ShouldBeOfType<FileStreamResult>();
         fileResult.ContentType.ShouldBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         fileResult.FileDownloadName.ShouldBe("Consolidado_Planillas_20260101_20260630.xlsx");
+        _auditoriaMock.Verify(a => a.RegistrarAsync(AccionesAuditoria.ConsolidadoDescargado, true, UsuarioId, It.IsAny<string?>(),
+            It.IsAny<string?>(), It.IsAny<object?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 }

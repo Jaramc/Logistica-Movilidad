@@ -2,6 +2,7 @@ using LogisticaBackend.Auth;
 using LogisticaBackend.Domain.Entities;
 using LogisticaBackend.DTOs;
 using LogisticaBackend.Middleware;
+using LogisticaBackend.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -18,12 +19,14 @@ public class UsuariosController : ControllerBase
 {
     private readonly UserManager<Usuario> _userManager;
     private readonly TimeProvider _reloj;
+    private readonly IAuditoriaService _auditoria;
     private readonly ILogger<UsuariosController> _logger;
 
-    public UsuariosController(UserManager<Usuario> userManager, TimeProvider reloj, ILogger<UsuariosController> logger)
+    public UsuariosController(UserManager<Usuario> userManager, TimeProvider reloj, IAuditoriaService auditoria, ILogger<UsuariosController> logger)
     {
         _userManager = userManager;
         _reloj = reloj;
+        _auditoria = auditoria;
         _logger = logger;
     }
 
@@ -68,6 +71,8 @@ public class UsuariosController : ControllerBase
             return ErroresIdentity(creado, nameof(CrearUsuarioDto.Email));
         }
         await _userManager.AddToRoleAsync(usuario, dto.Rol);
+        await _auditoria.RegistrarAsync(AccionesAuditoria.UsuarioCreado, true, IdActual(), "Usuario", usuario.Id.ToString(),
+            new { rol = dto.Rol });
 
         _logger.LogInformation("Administrador {AdminId} creó el usuario {UsuarioId} con rol {Rol}.", IdActual(), usuario.Id, dto.Rol);
         return StatusCode(StatusCodes.Status201Created, new UsuarioCreadoDto(await ADtoAsync(usuario), passwordTemporal));
@@ -91,6 +96,8 @@ public class UsuariosController : ControllerBase
         await _userManager.RemoveFromRolesAsync(usuario, rolesActuales);
         await _userManager.AddToRoleAsync(usuario, dto.Rol);
         await _userManager.UpdateSecurityStampAsync(usuario); // la sesión abierta toma el rol nuevo
+        await _auditoria.RegistrarAsync(AccionesAuditoria.RolCambiado, true, IdActual(), "Usuario", usuario.Id.ToString(),
+            new { rolAnterior = rolesActuales.FirstOrDefault(), rolNuevo = dto.Rol });
 
         _logger.LogInformation("Administrador {AdminId} cambió el rol del usuario {UsuarioId} a {Rol}.", IdActual(), usuario.Id, dto.Rol);
         return Ok(await ADtoAsync(usuario));
@@ -129,6 +136,8 @@ public class UsuariosController : ControllerBase
 
         // Rotar el stamp cierra las sesiones abiertas en la siguiente validación.
         await _userManager.UpdateSecurityStampAsync(usuario);
+        await _auditoria.RegistrarAsync(dto.Activo ? AccionesAuditoria.UsuarioActivado : AccionesAuditoria.UsuarioDesactivado,
+            true, IdActual(), "Usuario", usuario.Id.ToString());
 
         _logger.LogInformation("Administrador {AdminId} cambió el estado del usuario {UsuarioId}. Activo: {Activo}.", IdActual(), usuario.Id, dto.Activo);
         return Ok(await ADtoAsync(usuario));
@@ -146,6 +155,7 @@ public class UsuariosController : ControllerBase
         await _userManager.ResetAuthenticatorKeyAsync(usuario);
         await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(usuario, 0); // invalida los códigos anteriores
         await _userManager.UpdateSecurityStampAsync(usuario);
+        await _auditoria.RegistrarAsync(AccionesAuditoria.DosFactoresReiniciado, true, IdActual(), "Usuario", usuario.Id.ToString());
 
         _logger.LogInformation("Administrador {AdminId} reinició el 2FA del usuario {UsuarioId}.", IdActual(), usuario.Id);
         return Ok(await ADtoAsync(usuario));

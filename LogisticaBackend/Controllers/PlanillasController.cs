@@ -22,6 +22,7 @@ public class PlanillasController : ControllerBase
     private readonly IExcelExportService _excelService;
     private readonly AppDbContext _context;
     private readonly TimeProvider _reloj;
+    private readonly IAuditoriaService _auditoria;
     private readonly ILogger<PlanillasController> _logger;
 
     public PlanillasController(
@@ -29,12 +30,14 @@ public class PlanillasController : ControllerBase
         IExcelExportService excelService,
         AppDbContext context,
         TimeProvider reloj,
+        IAuditoriaService auditoria,
         ILogger<PlanillasController> logger)
     {
         _ocrService = ocrService ?? throw new ArgumentNullException(nameof(ocrService));
         _excelService = excelService ?? throw new ArgumentNullException(nameof(excelService));
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _reloj = reloj ?? throw new ArgumentNullException(nameof(reloj));
+        _auditoria = auditoria ?? throw new ArgumentNullException(nameof(auditoria));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -125,6 +128,8 @@ public class PlanillasController : ControllerBase
         await _context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Planilla {Id} guardada por el usuario {UsuarioId}.", entidad.Id, usuarioId);
+        await _auditoria.RegistrarAsync(AccionesAuditoria.PlanillaGuardada, true, usuarioId, "PlanillaViaje", entidad.Id.ToString(),
+            new { placa = entidad.Placa, renglones = entidad.Gastos.Count, entidad.TotalGastos, entidad.SaldoTotal });
 
         return CreatedAtAction(
             nameof(ObtenerPlanillaPorId),
@@ -203,6 +208,8 @@ public class PlanillasController : ControllerBase
         CancellationToken cancellationToken)
     {
         var memoryStream = await _excelService.GenerarConsolidadoExcelAsync(rango.Desde, rango.Hasta, cancellationToken);
+        await _auditoria.RegistrarAsync(AccionesAuditoria.ConsolidadoDescargado, true, IdUsuarioActual(), "PlanillaViaje", null,
+            new { desde = rango.Desde, hasta = rango.Hasta, bytes = memoryStream.Length });
 
         return File(
             fileStream: memoryStream,
