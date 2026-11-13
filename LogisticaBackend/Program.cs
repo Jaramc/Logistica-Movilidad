@@ -1,4 +1,5 @@
-using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Http.Features;
 using Azure;
 using Azure.AI.FormRecognizer.DocumentAnalysis;
 using FluentValidation;
@@ -84,33 +85,36 @@ builder.Services.AddIdentidadLogistica(builder.Configuration);
 builder.Services.AddHealthChecks()
     .AddCheck<BaseDatosHealthCheck>("database", tags: new[] { "ready" });
 
-// 9. Rate Limiting por IP para proteger endpoints de IA
-builder.Services.AddRateLimiter(options =>
-{
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddPolicy("ocr_policy", httpContext =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anon_client",
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 10,
-                Window = TimeSpan.FromSeconds(60),
-                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                QueueLimit = 0
-            }));
+// 9. Límite de peticiones: login por IP y por usuario, OCR por usuario y global (Microsoft.AspNetCore.RateLimiting).
+builder.Services.AddLimitesPeticiones(builder.Configuration);
 
-    options.OnRejected = async (context, token) =>
+// 9b. IP real detrás de Caddy. Solo se confía en el proxy local (loopback) y en los proxies
+// listados en Proxy:ProxiesConocidos (p. ej. la IP del contenedor de Caddy).
+builder.Services.Configure<ForwardedHeadersOptions>(o =>
+{
+    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    o.ForwardLimit = 1;
+    foreach (var ip in builder.Configuration.GetSection("Proxy:ProxiesConocidos").Get<string[]>() ?? Array.Empty<string>())
     {
-        context.HttpContext.Response.Headers.RetryAfter = "60";
-        context.HttpContext.Response.ContentType = "application/problem+json";
-        await context.HttpContext.Response.WriteAsJsonAsync(new ProblemDetails
-        {
-            Status = StatusCodes.Status429TooManyRequests,
-            Title = "Demasiadas Solicitudes de Extracción",
-            Detail = "Ha excedido el límite de solicitudes de análisis OCR permitidas por minuto. Por favor espere 60 segundos.",
-            Instance = context.HttpContext.Request.Path
-        }, token);
-    };
+        o.KnownProxies.Add(System.Net.IPAddress.Parse(ip));
+    }
+});
+
+// 9c. Límites de tamaño: 1 MB por defecto; solo los endpoints que suben archivos amplían a 10 MB.
+const long TamanoMaximoCuerpo = 1024 * 1024;
+builder.WebHost.ConfigureKestrel(k =>
+{
+    k.Limits.MaxRequestBodySize = TamanoMaximoCuerpo;
+    k.Limits.MaxRequestHeadersTotalSize = 32 * 1024;
+    k.Limits.RequestHeadersTimeout = TimeSpan.FromSeconds(30);
+});
+builder.Services.Configure<FormOptions>(o =>
+{
+    o.MultipartBodyLengthLimit = TamanoMaximoCuerpo;
+    o.ValueCountLimit = 50;
+    o.ValueLengthLimit = 64 * 1024;
+    o.MultipartHeadersLengthLimit = 16 * 1024;
+    o.MemoryBufferThreshold = 64 * 1024;
 });
 
 // 10. CORS Restringido a Orígenes de Frontend Autorizados
@@ -125,6 +129,8 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+app.UseForwardedHeaders(); // primero: el resto del pipeline ve la IP real
 
 // Falla rápido: sin cadena de conexión válida la aplicación no arranca.
 ValidadorConfiguracion.ObtenerCadenaConexion(app.Configuration, app.Environment);
@@ -145,9 +151,9 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors("PermitirReact");
-app.UseRateLimiter();
 
 app.UseAuthentication();
+app.UseRateLimiter(); // después de autenticar: los límites por usuario usan la sesión
 app.UseAuthorization();
 
 app.MapControllers();

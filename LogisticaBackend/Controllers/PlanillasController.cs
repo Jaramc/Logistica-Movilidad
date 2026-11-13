@@ -8,6 +8,7 @@ using LogisticaBackend.Domain.Entities;
 using LogisticaBackend.Domain.Services;
 using LogisticaBackend.DTOs;
 using LogisticaBackend.Interfaces;
+using LogisticaBackend.Middleware;
 using LogisticaBackend.Services;
 
 namespace LogisticaBackend.Controllers;
@@ -42,8 +43,9 @@ public class PlanillasController : ControllerBase
     /// </summary>
     [HttpPost("extraer")]
     [Authorize(Policy = Politicas.PuedeRevisar)]
-    [EnableRateLimiting("ocr_policy")]
-    [RequestSizeLimit(FileValidationService.TamanoMaximoBytes)]
+    [EnableRateLimiting(LimitesPeticiones.PoliticaOcr)]
+    [RequestSizeLimit(FileValidationService.TamanoMaximoCuerpoSubida)]
+    [RequestFormLimits(MultipartBodyLengthLimit = FileValidationService.TamanoMaximoCuerpoSubida)]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(PlanillaOcrResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]

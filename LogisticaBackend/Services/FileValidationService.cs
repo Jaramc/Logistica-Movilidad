@@ -3,7 +3,8 @@ namespace LogisticaBackend.Services;
 public record ValidacionArchivoResultado(
     bool EsValido,
     string? MensajeError,
-    string? TipoDetectado
+    string? TipoDetectado,
+    string? NombreParaMostrar = null
 );
 
 /// <summary>
@@ -12,11 +13,16 @@ public record ValidacionArchivoResultado(
 /// </summary>
 public static class FileValidationService
 {
-    public const long TamanoMaximoBytes = 10 * 1024 * 1024; // 10 MB
+    public const long TamanoMaximoBytes = 10 * 1024 * 1024; // 10 MB por archivo
+
+    /// <summary>Límite del cuerpo multipart en endpoints de subida: el archivo más los encabezados del formulario.</summary>
+    public const long TamanoMaximoCuerpoSubida = TamanoMaximoBytes + 64 * 1024;
+
+    private const int LongitudMaximaNombre = 100;
 
     private static readonly Dictionary<string, byte[][]> FirmasValidas = new(StringComparer.OrdinalIgnoreCase)
     {
-        { "application/pdf", new[] { new byte[] { 0x25, 0x50, 0x44, 0x46 } } }, // %PDF
+        { "application/pdf", new[] { new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2D } } }, // %PDF-
         { "image/png", new[] { new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A } } },
         { "image/jpeg", new[] { new byte[] { 0xFF, 0xD8, 0xFF } } }
     };
@@ -58,7 +64,7 @@ public static class FileValidationService
             using var stream = archivo.OpenReadStream();
             var maxFirma = FirmasValidas[contentType].Max(f => f.Length);
             var buffer = new byte[maxFirma];
-            var leidos = await stream.ReadAsync(buffer.AsMemory(0, maxFirma), cancellationToken);
+            var leidos = await stream.ReadAtLeastAsync(buffer.AsMemory(0, maxFirma), maxFirma, throwOnEndOfStream: false, cancellationToken);
 
             if (leidos < maxFirma)
             {
@@ -74,12 +80,25 @@ public static class FileValidationService
                 return new ValidacionArchivoResultado(false, "El contenido binario no coincide con la firma auténtica de un archivo PDF, JPEG o PNG.", null);
             }
 
-            return new ValidacionArchivoResultado(true, null, contentType);
+            return new ValidacionArchivoResultado(true, null, contentType, SanitizarNombre(archivo.FileName));
         }
         catch
         {
             return new ValidacionArchivoResultado(false, "Error de E/S al leer los bytes del archivo.", null);
         }
     }
-}
 
+    /// <summary>
+    /// Nombre original apto SOLO para mostrar: sin rutas, sin caracteres de control ni
+    /// separadores y recortado. Nunca se usa para guardar, buscar ni construir rutas.
+    /// </summary>
+    public static string SanitizarNombre(string? nombre)
+    {
+        var soloNombre = Path.GetFileName((nombre ?? string.Empty).Replace('\\', '/').Split('/').Last());
+        var limpio = new string(soloNombre
+            .Where(c => char.IsLetterOrDigit(c) || c is ' ' or '.' or '-' or '_' or '(' or ')')
+            .ToArray()).Trim(' ', '.');
+        if (limpio.Length > LongitudMaximaNombre) limpio = limpio[..LongitudMaximaNombre];
+        return string.IsNullOrEmpty(limpio) ? "archivo" : limpio;
+    }
+}

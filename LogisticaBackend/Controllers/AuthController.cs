@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 
 namespace LogisticaBackend.Controllers;
@@ -26,6 +27,7 @@ public class AuthController : ControllerBase
     private readonly SignInManager<Usuario> _signInManager;
     private readonly SeguridadOptions _seguridad;
     private readonly TimeProvider _reloj;
+    private readonly LimitadorLoginPorUsuario _limitador;
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
@@ -33,12 +35,14 @@ public class AuthController : ControllerBase
         SignInManager<Usuario> signInManager,
         IOptions<SeguridadOptions> seguridad,
         TimeProvider reloj,
+        LimitadorLoginPorUsuario limitador,
         ILogger<AuthController> logger)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _seguridad = seguridad.Value;
         _reloj = reloj;
+        _limitador = limitador;
         _logger = logger;
     }
 
@@ -57,11 +61,17 @@ public class AuthController : ControllerBase
 
     /// <summary>Primer paso: correo y contraseña. Respuesta idéntica si el usuario no existe, está bloqueado o inactivo.</summary>
     [HttpPost("login")]
+    [EnableRateLimiting(LimitesPeticiones.PoliticaLogin)]
     [AllowAnonymous]
     [ProducesResponseType(typeof(LoginRespuestaDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Login([FromBody] LoginDto dto)
     {
+        if (_limitador.Intentar("correo:" + dto.Email) is { } espera)
+        {
+            return LimiteExcedido(espera);
+        }
+
         var usuario = await _userManager.FindByEmailAsync(dto.Email.Trim());
         if (usuario is null)
         {
@@ -97,6 +107,7 @@ public class AuthController : ControllerBase
 
     /// <summary>Segundo paso con el código de la app autenticadora.</summary>
     [HttpPost("login-2fa")]
+    [EnableRateLimiting(LimitesPeticiones.PoliticaLogin)]
     [AllowAnonymous]
     [ProducesResponseType(typeof(UsuarioActualDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -107,6 +118,10 @@ public class AuthController : ControllerBase
         {
             return CodigoFallido();
         }
+        if (_limitador.Intentar("usuario:" + usuario.Id) is { } espera)
+        {
+            return LimiteExcedido(espera);
+        }
 
         var codigo = NormalizarCodigoTotp(dto.Codigo);
         var resultado = await _signInManager.TwoFactorAuthenticatorSignInAsync(codigo, isPersistent: false, rememberClient: false);
@@ -115,6 +130,7 @@ public class AuthController : ControllerBase
 
     /// <summary>Segundo paso con un código de recuperación (cada código sirve una sola vez).</summary>
     [HttpPost("login-recuperacion")]
+    [EnableRateLimiting(LimitesPeticiones.PoliticaLogin)]
     [AllowAnonymous]
     [ProducesResponseType(typeof(UsuarioActualDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -124,6 +140,10 @@ public class AuthController : ControllerBase
         if (usuario is null)
         {
             return CodigoFallido();
+        }
+        if (_limitador.Intentar("usuario:" + usuario.Id) is { } espera)
+        {
+            return LimiteExcedido(espera);
         }
 
         var resultado = await _signInManager.TwoFactorRecoveryCodeSignInAsync(UsuarioStore.NormalizarCodigo(dto.Codigo));
@@ -295,6 +315,13 @@ public class AuthController : ControllerBase
         var roles = (await _userManager.GetRolesAsync(usuario)).ToList();
         return new UsuarioActualDto(usuario.Id, usuario.Email!, usuario.NombreCompleto, roles,
             usuario.TwoFactorEnabled, sesionConMfa, usuario.DebeCambiarPassword);
+    }
+
+    private ObjectResult LimiteExcedido(int segundos)
+    {
+        Response.Headers.RetryAfter = segundos.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return Problemas.Crear(HttpContext, StatusCodes.Status429TooManyRequests, "Demasiadas solicitudes",
+            $"Demasiados intentos. Intente de nuevo en {segundos} segundos.");
     }
 
     private ObjectResult LoginFallido() =>
