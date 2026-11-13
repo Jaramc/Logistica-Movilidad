@@ -1,3 +1,4 @@
+#pragma warning disable CS0618
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using LogisticaBackend.Models;
@@ -110,3 +111,4 @@ public class LiquidacionViajeConfiguration : IEntityTypeConfiguration<Liquidacio
             .HasDefaultValue(0m);
     }
 }
+#pragma warning restore CS0618

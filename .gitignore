@@ -3,8 +3,18 @@
 ##
 ## Get latest from `dotnet new gitignore`
 
-# dotenv files
+# dotenv files (solo se versionan los .env.example)
 .env
+.env.*
+!.env.example
+
+# Datos reales de negocio: nunca al repositorio
+/*.xlsx
+/*.xls
+/*.csv
+
+# Reportes de cobertura del frontend
+LogisticaFrontend/coverage/
 
 # User-specific files
 # Configuration files / Secrets

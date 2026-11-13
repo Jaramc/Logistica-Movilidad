@@ -18,6 +18,7 @@ export type GastoItem = z.infer<typeof GastoItemSchema>;
  */
 export const PlanillaOcrResponseSchema = z.object({
   mensaje: z.string().optional(),
+  advertencias: z.array(z.string()).optional(),
   data: z.object({
     placa: z.string().nullish().transform(val => (val ?? '').trim().toUpperCase()),
     origen: z.string().nullish().transform(val => (val ?? '').trim()),
@@ -94,3 +95,52 @@ export const GuardarPlanillaDtoSchema = z.object({
 });
 
 export type GuardarPlanillaDto = z.infer<typeof GuardarPlanillaDtoSchema>;
+
+/**
+ * Esquema de resumen de planilla para listados e historial.
+ */
+export const PlanillaResumenSchema = z.object({
+  id: z.number(),
+  numeroPlanilla: z.string().nullable().optional(),
+  placa: z.string(),
+  conductor: z.string().nullable().optional(),
+  origen: z.string().nullable().optional().transform(v => v ?? 'N/A'),
+  destino: z.string().nullable().optional().transform(v => v ?? 'N/A'),
+  fechaInicial: z.string().nullable().optional(),
+  fechaFinal: z.string().nullable().optional(),
+  fechaViaje: z.string().nullable().optional(),
+  totalGastos: z.number(),
+  saldoViaje: z.number(),
+  saldoTotal: z.number().optional(),
+  estado: z.string().optional(),
+  estadoRevision: z.string().optional(),
+  creadoEn: z.string().optional(),
+  createdAt: z.string().optional(),
+}).transform(v => ({
+  ...v,
+  estado: v.estado ?? v.estadoRevision ?? 'Aprobado',
+}));
+
+export type PlanillaResumen = z.infer<typeof PlanillaResumenSchema>;
+
+/**
+ * Esquema paginado para el historial de planillas (PagedResultDto<T> del backend).
+ */
+export const PagedPlanillasSchema = z.object({
+  items: z.array(PlanillaResumenSchema),
+  totalCount: z.number().optional(),
+  totalItems: z.number().optional(),
+  page: z.number(),
+  pageSize: z.number(),
+  totalPages: z.number(),
+}).transform(val => ({
+  items: val.items,
+  totalItems: val.totalItems ?? val.totalCount ?? val.items.length,
+  totalCount: val.totalCount ?? val.totalItems ?? val.items.length,
+  page: val.page,
+  pageSize: val.pageSize,
+  totalPages: val.totalPages,
+}));
+
+export type PagedPlanillas = z.infer<typeof PagedPlanillasSchema>;
+

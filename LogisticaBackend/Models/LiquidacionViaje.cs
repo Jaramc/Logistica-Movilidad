@@ -1,5 +1,10 @@
 namespace LogisticaBackend.Models;
 
+/// <summary>
+/// Modelo legacy de 16 columnas fijas de gastos.
+/// Tarea de retiro pendiente: Migrar a PlanillaViaje tras confirmación explícita del usuario.
+/// </summary>
+[Obsolete("Esquema legacy de 16 columnas fijas. Se conservará temporalmente para mantener compatibilidad con bases de datos preexistentes. Utilizar PlanillaViaje con relación 1:N a GastoDetalle.")]
 public class LiquidacionViaje
 {
     public int Id { get; set; }
@@ -12,7 +17,7 @@ public class LiquidacionViaje
     public string? OrigenViaje { get; set; }
     public string? Destino { get; set; }
 
-    // Gastos Operativos
+    // Gastos Operativos (16 columnas fijas heredadas)
     public decimal Peajes { get; set; } = 0m;
     public decimal Porcentaje { get; set; } = 0m;
     public decimal Comision { get; set; } = 0m;
@@ -40,12 +45,7 @@ public class LiquidacionViaje
 
     // Auditoría y Control de Flujo
     public string EstadoRevision { get; set; } = "pendiente";
-    
-    /// <summary>
-    /// Almacena el JSON crudo del OCR en PostgreSQL como tipo jsonb.
-    /// </summary>
     public string? JsonOcrCrudo { get; set; }
-
     public DateTime CreadoEn { get; set; }
     public DateTime ActualizadoEn { get; set; }
 }

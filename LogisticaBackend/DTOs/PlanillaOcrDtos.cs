@@ -1,30 +1,38 @@
 namespace LogisticaBackend.DTOs;
 
 /// <summary>
-/// DTO con la información consolidada y extraída de la Planilla de Gastos del Conductor.
+/// Envoltorio estándar de respuesta OCR para el frontend.
 /// </summary>
-public class PlanillaOcrResultDto
-{
-    public string? Placa { get; set; }
-    public string? Origen { get; set; }
-    public string? Destino { get; set; }
-    public double Flete { get; set; } = 0.0;
-    public double Anticipo { get; set; } = 0.0;
-    public double TotalGastos { get; set; } = 0.0;
-    public double SaldoViaje { get; set; } = 0.0;
-
-    /// <summary>
-    /// Filas de la tabla dinámica 'DetalleGastos' identificadas en el documento.
-    /// </summary>
-    public List<GastoDetalleDto> DetalleGastos { get; set; } = new();
-}
+public record PlanillaOcrResponseDto(
+    string Mensaje,
+    PlanillaOcrDataDto Data
+);
 
 /// <summary>
-/// DTO que representa un renglón individual dentro de la tabla de gastos.
+/// Datos financieros y de ruta extraídos por Azure Document Intelligence.
+/// Todos los importes monetarios utilizan 'decimal' (precisión contable exacta).
 /// </summary>
-public class GastoDetalleDto
-{
-    public string Concepto { get; set; } = string.Empty;
-    public double Valor { get; set; } = 0.0;
-}
+public record PlanillaOcrDataDto(
+    string? Placa,
+    string? Origen,
+    string? Destino,
+    decimal Flete,
+    decimal Anticipo,
+    decimal TotalGastos,
+    decimal SaldoViaje,
+    List<GastoDetalleOcrDto> DetalleGastos,
+    string? Conductor = null,
+    DateOnly? FechaInicial = null,
+    DateOnly? FechaFinal = null,
+    string? Manifiesto = null,
+    string? EmpresaTransportadora = null,
+    List<string>? Advertencias = null
+);
 
+/// <summary>
+/// Renglón individual extraído de la tabla de gastos de la planilla.
+/// </summary>
+public record GastoDetalleOcrDto(
+    string Concepto,
+    decimal Valor
+);

@@ -1,35 +1,28 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { RefreshCw, FileText, CheckCircle2, Truck } from 'lucide-react';
+import { RefreshCw, FileText, CheckCircle2, Truck, ChevronLeft, ChevronRight } from 'lucide-react';
 import { obtenerHistorialApi } from '../api/planillasApi';
+import type { PagedPlanillas } from '../features/planillas/schemas/planillaSchema';
 import { formatCOP } from '../features/planillas/utils/money';
 import DescargarReporte from './DescargarReporte';
 import { Button } from './ui/Button';
 import { Alert } from './ui/Alert';
 
-interface FilaHistorial {
-  id?: number;
-  placa?: string;
-  conductor?: string;
-  origenViaje?: string;
-  origen?: string;
-  destino?: string;
-  totalGastos?: number;
-  saldoViaje?: number;
-  estadoRevision?: string;
-}
-
 export const HistorialLiquidaciones: React.FC = () => {
-  const { data, isLoading, error, refetch, isFetching } = useQuery<FilaHistorial[]>({
-    queryKey: ['historial-liquidaciones'],
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+
+  const { data, isLoading, error, refetch, isFetching } = useQuery<PagedPlanillas>({
+    queryKey: ['historial-liquidaciones', page],
     queryFn: async () => {
-      const res = await obtenerHistorialApi();
-      return (res ?? []) as FilaHistorial[];
+      return await obtenerHistorialApi(page, pageSize);
     },
     staleTime: 30000,
   });
 
-  const liquidaciones = data ?? [];
+  const liquidaciones = data?.items ?? [];
+  const totalPages = data?.totalPages ?? 1;
+  const totalItems = data?.totalItems ?? 0;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -96,7 +89,7 @@ export const HistorialLiquidaciones: React.FC = () => {
                       </td>
                       <td className="py-3 px-4 text-slate-800">{liq.conductor || 'N/A'}</td>
                       <td className="py-3 px-4 text-slate-600">
-                        {liq.origen || liq.origenViaje || 'N/A'} → {liq.destino || 'N/A'}
+                        {liq.origen || 'N/A'} → {liq.destino || 'N/A'}
                       </td>
                       <td className="py-3 px-4 text-right font-mono font-medium text-slate-900">
                         {formatCOP(liq.totalGastos ?? 0)}
@@ -107,7 +100,7 @@ export const HistorialLiquidaciones: React.FC = () => {
                       <td className="py-3 px-4 text-center">
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
                           <CheckCircle2 className="w-3 h-3" aria-hidden="true" />
-                          {liq.estadoRevision || 'Aprobado'}
+                          {liq.estado || 'Aprobado'}
                         </span>
                       </td>
                     </tr>
@@ -116,6 +109,36 @@ export const HistorialLiquidaciones: React.FC = () => {
               </tbody>
             </table>
           </div>
+
+          {/* Barra de Paginación */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-t border-slate-200 sm:px-6">
+              <div className="text-xs text-slate-500">
+                Página <span className="font-semibold text-slate-700">{page}</span> de{' '}
+                <span className="font-semibold text-slate-700">{totalPages}</span> ({totalItems} planillas registradas)
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1 || isFetching}
+                  leftIcon={<ChevronLeft className="w-4 h-4" />}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages || isFetching}
+                  rightIcon={<ChevronRight className="w-4 h-4" />}
+                >
+                  Siguiente
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
