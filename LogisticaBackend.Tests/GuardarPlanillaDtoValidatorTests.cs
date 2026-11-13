@@ -1,4 +1,4 @@
-using FluentAssertions;
+using Shouldly;
 using LogisticaBackend.DTOs;
 using LogisticaBackend.Validators;
 using Xunit;
@@ -37,8 +37,8 @@ public class GuardarPlanillaDtoValidatorTests
         var dto = CrearDtoValido();
         var resultado = _validator.Validate(dto);
 
-        resultado.IsValid.Should().BeTrue();
-        resultado.Errors.Should().BeEmpty();
+        resultado.IsValid.ShouldBeTrue();
+        resultado.Errors.ShouldBeEmpty();
     }
 
     [Theory]
@@ -58,8 +58,8 @@ public class GuardarPlanillaDtoValidatorTests
 
         var resultado = _validator.Validate(dto);
 
-        resultado.IsValid.Should().BeFalse();
-        resultado.Errors.Should().Contain(e => e.PropertyName.StartsWith("Gastos") && e.ErrorMessage.Contains("No se permite incluir 'FLETE' o 'ANTICIPO'"));
+        resultado.IsValid.ShouldBeFalse();
+        resultado.Errors.ShouldContain(e => e.PropertyName.StartsWith("Gastos") && e.ErrorMessage.Contains("No se permite incluir 'FLETE' o 'ANTICIPO'"));
     }
 
     [Theory]
@@ -79,8 +79,8 @@ public class GuardarPlanillaDtoValidatorTests
 
         var resultado = _validator.Validate(dto);
 
-        resultado.IsValid.Should().BeFalse();
-        resultado.Errors.Should().Contain(e => e.PropertyName.StartsWith("Gastos") && e.ErrorMessage.Contains("No se permite incluir 'FLETE' o 'ANTICIPO'"));
+        resultado.IsValid.ShouldBeFalse();
+        resultado.Errors.ShouldContain(e => e.PropertyName.StartsWith("Gastos") && e.ErrorMessage.Contains("No se permite incluir 'FLETE' o 'ANTICIPO'"));
     }
 
     [Theory]
@@ -92,8 +92,8 @@ public class GuardarPlanillaDtoValidatorTests
         var dto = CrearDtoValido() with { Placa = placaInvalida! };
         var resultado = _validator.Validate(dto);
 
-        resultado.IsValid.Should().BeFalse();
-        resultado.Errors.Should().Contain(e => e.PropertyName == "Placa");
+        resultado.IsValid.ShouldBeFalse();
+        resultado.Errors.ShouldContain(e => e.PropertyName == "Placa");
     }
 
     [Fact]
@@ -102,8 +102,8 @@ public class GuardarPlanillaDtoValidatorTests
         var dto = CrearDtoValido() with { Flete = -100m };
         var resultado = _validator.Validate(dto);
 
-        resultado.IsValid.Should().BeFalse();
-        resultado.Errors.Should().Contain(e => e.PropertyName == "Flete");
+        resultado.IsValid.ShouldBeFalse();
+        resultado.Errors.ShouldContain(e => e.PropertyName == "Flete");
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public class GuardarPlanillaDtoValidatorTests
         var dto = CrearDtoValido() with { Anticipo = -50m };
         var resultado = _validator.Validate(dto);
 
-        resultado.IsValid.Should().BeFalse();
-        resultado.Errors.Should().Contain(e => e.PropertyName == "Anticipo");
+        resultado.IsValid.ShouldBeFalse();
+        resultado.Errors.ShouldContain(e => e.PropertyName == "Anticipo");
     }
 }

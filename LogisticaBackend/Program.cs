@@ -37,26 +37,23 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddValidatorsFromAssemblyContaining<GuardarPlanillaDtoValidator>();
 
 // 4. Configuración Fuertemente Tipada de Azure Document Intelligence
-builder.Services.Configure<AzureOcrOptions>(options =>
-{
-    var config = builder.Configuration;
-    options.Endpoint = config["AzureDocumentIntelligence:Endpoint"]
-        ?? config["Azure:FormRecognizer:Endpoint"]
-        ?? string.Empty;
-    options.ApiKey = config["AzureDocumentIntelligence:ApiKey"]
-        ?? config["Azure:FormRecognizer:ApiKey"]
-        ?? string.Empty;
-    options.ModelId = config["AzureDocumentIntelligence:ModelId"]
-        ?? "planillas-gastos-v1";
-});
+// Se lee de user-secrets (desarrollo) o de variables de entorno AzureDocumentIntelligence__*.
+builder.Services.AddOptions<AzureOcrOptions>()
+    .Bind(builder.Configuration.GetSection(AzureOcrOptions.SectionName));
 
 // 5. Inyección Singleton de DocumentAnalysisClient (Reutilización de Sockets HTTP)
 builder.Services.AddSingleton(sp =>
 {
     var options = sp.GetRequiredService<IOptions<AzureOcrOptions>>().Value;
+    var entorno = sp.GetRequiredService<IHostEnvironment>();
+    ValidadorConfiguracion.ValidarAzure(options, entorno);
+
     if (string.IsNullOrWhiteSpace(options.Endpoint) || string.IsNullOrWhiteSpace(options.ApiKey))
     {
-        return new DocumentAnalysisClient(new Uri("https://dummy.cognitiveservices.azure.com/"), new AzureKeyCredential("dummy-key"));
+        // Solo fuera de Production: permite arrancar sin Azure; el OCR responderá 502.
+        sp.GetRequiredService<ILogger<Program>>().LogWarning(
+            "Azure Document Intelligence no está configurado. El OCR no funcionará en este entorno.");
+        return new DocumentAnalysisClient(new Uri("https://no-configurado.invalid/"), new AzureKeyCredential("no-configurado"));
     }
     return new DocumentAnalysisClient(new Uri(options.Endpoint), new AzureKeyCredential(options.ApiKey));
 });
@@ -65,26 +62,14 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddScoped<IPlanillaOcrService, PlanillaOcrService>();
 builder.Services.AddScoped<IExcelExportService, ExcelExportService>();
 
-// 7. Base de Datos PostgreSQL con Entity Framework Core
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-if (!string.IsNullOrWhiteSpace(connectionString) && !connectionString.Contains("tu_password"))
-{
-    builder.Services.AddDbContext<AppDbContext>(options =>
-        options.UseNpgsql(connectionString));
-}
-else
-{
-    // Registra AppDbContext con dummy para que la inyección de dependencias no falle si PostgreSQL no está conectado
-    builder.Services.AddDbContext<AppDbContext>(options =>
-        options.UseNpgsql("Host=127.0.0.1;Port=5432;Database=logistica_db;Username=postgres;Password=dummy"));
-}
+// 7. Base de Datos PostgreSQL con Entity Framework Core (obligatoria).
+// En Production se niega a arrancar si falta la cadena o contiene valores de ejemplo.
+var connectionString = ValidadorConfiguracion.ObtenerCadenaConexion(builder.Configuration, builder.Environment);
+builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 
 // 8. Health Checks para Monitoreo de Liveness y Readiness
 builder.Services.AddHealthChecks()
-    .AddAsyncCheck("database", async () =>
-    {
-        return await Task.FromResult(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy());
-    }, tags: new[] { "ready" });
+    .AddCheck<BaseDatosHealthCheck>("database", tags: new[] { "ready" });
 
 // 9. Rate Limiting por IP para proteger endpoints de IA
 builder.Services.AddRateLimiter(options =>
@@ -153,3 +138,6 @@ app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => fa
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
 
 app.Run();
+
+// Expuesto para WebApplicationFactory en las pruebas de integración.
+public partial class Program;

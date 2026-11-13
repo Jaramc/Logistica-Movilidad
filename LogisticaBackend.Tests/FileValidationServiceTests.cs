@@ -1,5 +1,5 @@
 using System.Text;
-using FluentAssertions;
+using Shouldly;
 using LogisticaBackend.Services;
 using Microsoft.AspNetCore.Http;
 using Xunit;
@@ -26,8 +26,8 @@ public class FileValidationServiceTests
 
         var resultado = await FileValidationService.ValidarArchivoAsync(file);
 
-        resultado.EsValido.Should().BeTrue();
-        resultado.MensajeError.Should().BeNull();
+        resultado.EsValido.ShouldBeTrue();
+        resultado.MensajeError.ShouldBeNull();
     }
 
     [Fact]
@@ -38,7 +38,7 @@ public class FileValidationServiceTests
 
         var resultado = await FileValidationService.ValidarArchivoAsync(file);
 
-        resultado.EsValido.Should().BeTrue();
+        resultado.EsValido.ShouldBeTrue();
     }
 
     [Fact]
@@ -49,7 +49,7 @@ public class FileValidationServiceTests
 
         var resultado = await FileValidationService.ValidarArchivoAsync(file);
 
-        resultado.EsValido.Should().BeTrue();
+        resultado.EsValido.ShouldBeTrue();
     }
 
     [Fact]
@@ -61,8 +61,8 @@ public class FileValidationServiceTests
 
         var resultado = await FileValidationService.ValidarArchivoAsync(file);
 
-        resultado.EsValido.Should().BeFalse();
-        resultado.MensajeError.Should().Contain("no coincide con la firma auténtica");
+        resultado.EsValido.ShouldBeFalse();
+        resultado.MensajeError!.ShouldContain("no coincide con la firma auténtica", Case.Sensitive);
     }
 
     [Fact]
@@ -78,8 +78,8 @@ public class FileValidationServiceTests
 
         var resultado = await FileValidationService.ValidarArchivoAsync(fileMock);
 
-        resultado.EsValido.Should().BeFalse();
-        resultado.MensajeError.Should().Contain("10 MB");
+        resultado.EsValido.ShouldBeFalse();
+        resultado.MensajeError!.ShouldContain("10 MB", Case.Sensitive);
     }
 
     [Fact]
@@ -89,8 +89,8 @@ public class FileValidationServiceTests
 
         var resultado = await FileValidationService.ValidarArchivoAsync(file);
 
-        resultado.EsValido.Should().BeFalse();
-        resultado.MensajeError.Should().Contain("vacío");
+        resultado.EsValido.ShouldBeFalse();
+        resultado.MensajeError!.ShouldContain("vacío", Case.Sensitive);
     }
 
     [Fact]
@@ -98,7 +98,7 @@ public class FileValidationServiceTests
     {
         var resultado = await FileValidationService.ValidarArchivoAsync(null);
 
-        resultado.EsValido.Should().BeFalse();
-        resultado.MensajeError.Should().Contain("No se suministró ningún archivo");
+        resultado.EsValido.ShouldBeFalse();
+        resultado.MensajeError!.ShouldContain("No se suministró ningún archivo", Case.Sensitive);
     }
 }

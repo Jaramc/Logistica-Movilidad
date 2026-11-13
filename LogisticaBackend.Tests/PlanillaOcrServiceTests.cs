@@ -1,7 +1,7 @@
 using System.Globalization;
 using Azure;
 using Azure.AI.FormRecognizer.DocumentAnalysis;
-using FluentAssertions;
+using Shouldly;
 using LogisticaBackend.Configuration;
 using LogisticaBackend.Services;
 using Microsoft.Extensions.Logging;
@@ -90,10 +90,10 @@ public class PlanillaOcrServiceTests
         using var stream = new MemoryStream(new byte[] { 1, 2, 3 });
         var resultado = await service.ProcesarPlanillaAsync(stream);
 
-        resultado.Should().NotBeNull();
-        resultado.Mensaje.Should().Contain("No se detectó información estructurada");
-        resultado.Data.TotalGastos.Should().Be(0);
-        resultado.Data.Advertencias.Should().Contain(a => a.Contains("No se detectaron campos legibles"));
+        resultado.ShouldNotBeNull();
+        resultado.Mensaje.ShouldContain("No se detectó información estructurada");
+        resultado.Data.TotalGastos.ShouldBe(0);
+        resultado.Data.Advertencias!.ShouldContain(a => a.Contains("No se detectaron campos legibles"));
     }
 
     [Fact]
@@ -153,11 +153,11 @@ public class PlanillaOcrServiceTests
         using var stream = new MemoryStream(new byte[] { 1, 2, 3 });
         var resultado = await service.ProcesarPlanillaAsync(stream);
 
-        resultado.Data.Flete.Should().Be(6976800m); // Poblado desde la fila de la tabla
-        resultado.Data.Anticipo.Should().Be(2800000m);
-        resultado.Data.DetalleGastos.Should().HaveCount(1); // Excluyó FLETE de la lista de gastos
-        resultado.Data.DetalleGastos[0].Concepto.Should().Be("PARQUEO");
-        resultado.Data.TotalGastos.Should().Be(178000m); // Solo PARQUEO
+        resultado.Data.Flete.ShouldBe(6976800m); // Poblado desde la fila de la tabla
+        resultado.Data.Anticipo.ShouldBe(2800000m);
+        resultado.Data.DetalleGastos.Count().ShouldBe(1); // Excluyó FLETE de la lista de gastos
+        resultado.Data.DetalleGastos[0].Concepto.ShouldBe("PARQUEO");
+        resultado.Data.TotalGastos.ShouldBe(178000m); // Solo PARQUEO
     }
 
     [Fact]
@@ -216,9 +216,9 @@ public class PlanillaOcrServiceTests
         using var stream = new MemoryStream(new byte[] { 1, 2, 3 });
         var resultado = await service.ProcesarPlanillaAsync(stream);
 
-        resultado.Data.Flete.Should().Be(5000000m); // Conserva cabecera
-        resultado.Data.Advertencias.Should().NotBeNull();
-        resultado.Data.Advertencias.Should().Contain(a => a.Contains("El flete en cabecera") && a.Contains("difiere del flete en la tabla"));
-        resultado.Data.DetalleGastos.Should().BeEmpty(); // Descartado de gastos
+        resultado.Data.Flete.ShouldBe(5000000m); // Conserva cabecera
+        resultado.Data.Advertencias.ShouldNotBeNull();
+        resultado.Data.Advertencias!.ShouldContain(a => a.Contains("El flete en cabecera") && a.Contains("difiere del flete en la tabla"));
+        resultado.Data.DetalleGastos.ShouldBeEmpty(); // Descartado de gastos
     }
 }

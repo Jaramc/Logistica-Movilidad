@@ -1,4 +1,4 @@
-using FluentAssertions;
+using Shouldly;
 using LogisticaBackend.Domain.Services;
 using Xunit;
 
@@ -44,14 +44,14 @@ public class ConceptoNormalizerTests
     public void Normalizar_VariantesTextuales_MapeaACategoriaCorrecta(string? input, string esperado)
     {
         var normalizado = ConceptoNormalizer.Normalizar(input);
-        normalizado.Should().Be(esperado);
+        normalizado.ShouldBe(esperado);
     }
 
     [Fact]
     public void CategoriasCanonicas_ContieneExactamente16Categorias()
     {
-        ConceptoNormalizer.CategoriasCanonicas.Should().HaveCount(16);
-        ConceptoNormalizer.CategoriasCanonicas.Should().Contain(new[]
+        ConceptoNormalizer.CategoriasCanonicas.Count().ShouldBe(16);
+        ConceptoNormalizer.CategoriasCanonicas.ShouldBeSubsetOf(new[]
         {
             "PEAJES", "PORCENTAJE", "COMISION", "PARQUEO", "ACPM",
             "ENGRASE", "TENSIONADA", "ASEO", "LLANTAS", "UREA",
@@ -64,12 +64,12 @@ public class ConceptoNormalizerTests
     {
         var catalogo = ConceptoNormalizer.ObtenerCatalogo();
 
-        catalogo.Should().HaveCount(16);
-        catalogo.Should().AllSatisfy(c =>
+        catalogo.Count().ShouldBe(16);
+        foreach (var c in catalogo)
         {
-            c.Clave.Should().NotBeNullOrWhiteSpace();
-            c.Nombre.Should().NotBeNullOrWhiteSpace();
-            c.Descripcion.Should().NotBeNullOrWhiteSpace();
-        });
+            c.Clave.ShouldNotBeNullOrWhiteSpace();
+            c.Nombre.ShouldNotBeNullOrWhiteSpace();
+            c.Descripcion.ShouldNotBeNullOrWhiteSpace();
+        }
     }
 }

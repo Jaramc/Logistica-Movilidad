@@ -70,6 +70,14 @@ public class GlobalExceptionHandler : IExceptionHandler
                 problemDetails.Type = "https://tools.ietf.org/html/rfc7231#section-6.6.3";
                 break;
 
+            case Npgsql.NpgsqlException or TimeoutException
+                or Microsoft.EntityFrameworkCore.Storage.RetryLimitExceededException:
+                httpContext.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+                problemDetails.Status = StatusCodes.Status503ServiceUnavailable;
+                problemDetails.Title = "Servicio no disponible";
+                problemDetails.Detail = "La base de datos no está disponible en este momento. Intente de nuevo más tarde.";
+                break;
+
             default:
                 httpContext.Response.StatusCode = StatusCodes.Status500InternalServerError;
                 problemDetails.Status = StatusCodes.Status500InternalServerError;

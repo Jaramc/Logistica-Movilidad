@@ -1,5 +1,5 @@
 using ClosedXML.Excel;
-using FluentAssertions;
+using Shouldly;
 using LogisticaBackend.Data;
 using LogisticaBackend.Domain.Entities;
 using LogisticaBackend.Services;
@@ -31,24 +31,24 @@ public class ExcelExportServiceTests
 
         using var stream = await service.GenerarConsolidadoExcelAsync();
 
-        stream.Should().NotBeNull();
-        stream.Length.Should().BeGreaterThan(0);
+        stream.ShouldNotBeNull();
+        stream.Length.ShouldBeGreaterThan(0);
 
         using var workbook = new XLWorkbook(stream);
         var worksheet = workbook.Worksheet("Consolidado Planillas");
-        worksheet.Should().NotBeNull();
+        worksheet.ShouldNotBeNull();
 
         // Verificar columnas A a AG (33 columnas)
-        worksheet.LastColumnUsed()?.ColumnNumber().Should().Be(33);
+        worksheet.LastColumnUsed()?.ColumnNumber().ShouldBe(33);
 
         // Fila 1 debe tener encabezados
-        worksheet.Cell(1, 1).GetString().Should().Be("ID");
-        worksheet.Cell(1, 4).GetString().Should().Be("Conductor");
-        worksheet.Cell(1, 5).GetString().Should().Be("Placa");
-        worksheet.Cell(1, 10).GetString().Should().Be("Peajes"); // Columna J (primera categoría canónica)
-        worksheet.Cell(1, 25).GetString().Should().Be("Otros");  // Columna Y (última categoría canónica)
-        worksheet.Cell(1, 32).GetString().Should().Be("Estado"); // Columna AF
-        worksheet.Cell(1, 33).GetString().Should().Be("Fecha Registro UTC"); // Columna AG
+        worksheet.Cell(1, 1).GetString().ShouldBe("ID");
+        worksheet.Cell(1, 4).GetString().ShouldBe("Conductor");
+        worksheet.Cell(1, 5).GetString().ShouldBe("Placa");
+        worksheet.Cell(1, 10).GetString().ShouldBe("Peajes"); // Columna J (primera categoría canónica)
+        worksheet.Cell(1, 25).GetString().ShouldBe("Otros");  // Columna Y (última categoría canónica)
+        worksheet.Cell(1, 32).GetString().ShouldBe("Estado"); // Columna AF
+        worksheet.Cell(1, 33).GetString().ShouldBe("Fecha Registro UTC"); // Columna AG
     }
 
     [Fact]
@@ -89,22 +89,22 @@ public class ExcelExportServiceTests
         var worksheet = workbook.Worksheet("Consolidado Planillas");
 
         // Fila 2 contiene los datos
-        worksheet.Cell(2, 1).GetDouble().Should().Be(101);
-        worksheet.Cell(2, 4).GetString().Should().Be("JUAN VALDEZ");
-        worksheet.Cell(2, 5).GetString().Should().Be("WCN410");
+        worksheet.Cell(2, 1).GetDouble().ShouldBe(101);
+        worksheet.Cell(2, 4).GetString().ShouldBe("JUAN VALDEZ");
+        worksheet.Cell(2, 5).GetString().ShouldBe("WCN410");
 
         // Columna PEAJES (J = 10)
-        worksheet.Cell(2, 10).GetDouble().Should().Be(1500000);
+        worksheet.Cell(2, 10).GetDouble().ShouldBe(1500000);
         // Columna PARQUEO (M = 13)
-        worksheet.Cell(2, 13).GetDouble().Should().Be(178000);
+        worksheet.Cell(2, 13).GetDouble().ShouldBe(178000);
 
         // ACPM (N = 14) debe ser 0
-        worksheet.Cell(2, 14).GetDouble().Should().Be(0);
+        worksheet.Cell(2, 14).GetDouble().ShouldBe(0);
 
         // Total Gastos (Z = 26), Flete (AA = 27), Anticipo (AB = 28), Saldo Viaje (AC = 29)
-        worksheet.Cell(2, 26).GetDouble().Should().Be(1678000);
-        worksheet.Cell(2, 27).GetDouble().Should().Be(6976800);
-        worksheet.Cell(2, 28).GetDouble().Should().Be(2800000);
-        worksheet.Cell(2, 29).GetDouble().Should().Be(-1122000);
+        worksheet.Cell(2, 26).GetDouble().ShouldBe(1678000);
+        worksheet.Cell(2, 27).GetDouble().ShouldBe(6976800);
+        worksheet.Cell(2, 28).GetDouble().ShouldBe(2800000);
+        worksheet.Cell(2, 29).GetDouble().ShouldBe(-1122000);
     }
 }

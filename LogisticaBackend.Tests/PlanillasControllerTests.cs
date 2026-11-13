@@ -1,4 +1,4 @@
-using FluentAssertions;
+using Shouldly;
 using FluentValidation;
 using FluentValidation.Results;
 using LogisticaBackend.Controllers;
@@ -78,14 +78,14 @@ public class PlanillasControllerTests
 
         var result = await controller.GuardarPlanilla(dto, CancellationToken.None);
 
-        result.Should().BeOfType<ObjectResult>();
+        result.ShouldBeOfType<ObjectResult>();
         var objResult = (ObjectResult)result;
-        objResult.StatusCode.Should().Be(StatusCodes.Status422UnprocessableEntity);
-        objResult.Value.Should().BeOfType<ProblemDetails>();
+        objResult.StatusCode.ShouldBe(StatusCodes.Status422UnprocessableEntity);
+        objResult.Value.ShouldBeOfType<ProblemDetails>();
 
         var problemDetails = (ProblemDetails)objResult.Value!;
-        problemDetails.Title.Should().Be("Discrepancia en Totales Contables");
-        problemDetails.Detail.Should().Contain("TotalGastos");
+        problemDetails.Title.ShouldBe("Discrepancia en Totales Contables");
+        problemDetails.Detail!.ShouldContain("TotalGastos", Case.Sensitive);
     }
 
     [Fact]
@@ -122,15 +122,15 @@ public class PlanillasControllerTests
 
         var result = await controller.GuardarPlanilla(dto, CancellationToken.None);
 
-        result.Should().BeOfType<CreatedAtActionResult>();
+        result.ShouldBeOfType<CreatedAtActionResult>();
         var createdResult = (CreatedAtActionResult)result;
-        createdResult.StatusCode.Should().Be(StatusCodes.Status201Created);
+        createdResult.StatusCode.ShouldBe(StatusCodes.Status201Created);
 
         // Verificar que realmente se persistió en el contexto
         var planillaEnDb = await context.Planillas.Include(p => p.Gastos).FirstOrDefaultAsync(p => p.Placa == "WCN410");
-        planillaEnDb.Should().NotBeNull();
-        planillaEnDb!.Placa.Should().Be("WCN410");
-        planillaEnDb.Gastos.Should().HaveCount(4);
+        planillaEnDb.ShouldNotBeNull();
+        planillaEnDb!.Placa.ShouldBe("WCN410");
+        planillaEnDb.Gastos.Count().ShouldBe(4);
     }
 
     [Fact]
@@ -167,12 +167,12 @@ public class PlanillasControllerTests
 
         var result = await controller.GuardarPlanilla(dto, CancellationToken.None);
 
-        result.Should().BeOfType<ObjectResult>();
+        result.ShouldBeOfType<ObjectResult>();
         var objResult = (ObjectResult)result;
-        objResult.StatusCode.Should().Be(StatusCodes.Status422UnprocessableEntity);
+        objResult.StatusCode.ShouldBe(StatusCodes.Status422UnprocessableEntity);
 
-        var problem = objResult.Value.Should().BeOfType<ProblemDetails>().Which;
-        problem.Title.Should().Be("Error de Validación de Formulario");
+        var problem = objResult.Value.ShouldBeOfType<ProblemDetails>();
+        problem.Title.ShouldBe("Error de Validación de Formulario");
     }
 
     [Fact]
@@ -182,7 +182,7 @@ public class PlanillasControllerTests
 
         var result = await controller.ObtenerPlanillaPorId(999, CancellationToken.None);
 
-        result.Should().BeOfType<NotFoundObjectResult>();
+        result.ShouldBeOfType<NotFoundObjectResult>();
     }
 
     [Fact]
@@ -210,9 +210,9 @@ public class PlanillasControllerTests
 
         var result = await controller.ObtenerHistorial(page: 1, pageSize: 10, CancellationToken.None);
 
-        result.Should().BeOfType<OkObjectResult>();
+        result.ShouldBeOfType<OkObjectResult>();
         var okResult = (OkObjectResult)result;
-        okResult.Value.Should().NotBeNull();
+        okResult.Value.ShouldNotBeNull();
     }
 
     [Fact]
@@ -222,14 +222,14 @@ public class PlanillasControllerTests
 
         var result = controller.ObtenerCatalogoConceptos();
 
-        result.Should().BeOfType<OkObjectResult>();
+        result.ShouldBeOfType<OkObjectResult>();
         var okResult = (OkObjectResult)result;
         var list = okResult.Value as IReadOnlyList<ConceptoCanonicoDto>;
-        list.Should().NotBeNull();
-        list.Should().HaveCount(16);
-        list!.Select(c => c.Nombre).Should().Contain("PEAJES");
-        list!.Select(c => c.Nombre).Should().Contain("ACPM");
-        list!.Select(c => c.Nombre).Should().Contain("OTROS");
+        list.ShouldNotBeNull();
+        list.Count().ShouldBe(16);
+        list!.Select(c => c.Nombre).ShouldContain("PEAJES");
+        list!.Select(c => c.Nombre).ShouldContain("ACPM");
+        list!.Select(c => c.Nombre).ShouldContain("OTROS");
     }
 
     [Fact]
@@ -242,9 +242,9 @@ public class PlanillasControllerTests
 
         var result = await controller.DescargarConsolidado(null, null, CancellationToken.None);
 
-        result.Should().BeOfType<FileStreamResult>();
+        result.ShouldBeOfType<FileStreamResult>();
         var fileResult = (FileStreamResult)result;
-        fileResult.ContentType.Should().Be("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        fileResult.FileDownloadName.Should().Contain("Consolidado_Planillas");
+        fileResult.ContentType.ShouldBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        fileResult.FileDownloadName.ShouldContain("Consolidado_Planillas");
     }
 }

@@ -18,7 +18,7 @@ public class PlanillasController : ControllerBase
 {
     private readonly IPlanillaOcrService _ocrService;
     private readonly IExcelExportService _excelService;
-    private readonly AppDbContext? _context;
+    private readonly AppDbContext _context;
     private readonly IValidator<GuardarPlanillaDto> _validator;
     private readonly ILogger<PlanillasController> _logger;
 
@@ -27,13 +27,13 @@ public class PlanillasController : ControllerBase
         IExcelExportService excelService,
         IValidator<GuardarPlanillaDto> validator,
         ILogger<PlanillasController> logger,
-        AppDbContext? context = null)
+        AppDbContext context)
     {
         _ocrService = ocrService ?? throw new ArgumentNullException(nameof(ocrService));
         _excelService = excelService ?? throw new ArgumentNullException(nameof(excelService));
         _validator = validator ?? throw new ArgumentNullException(nameof(validator));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _context = context; // Desacoplado: permite extracción OCR sin base de datos activa
+        _context = context ?? throw new ArgumentNullException(nameof(context));
     }
 
     /// <summary>
@@ -147,17 +147,6 @@ public class PlanillasController : ControllerBase
             });
         }
 
-        // 3. Verificación de disponibilidad de base de datos
-        if (_context == null || !await VerificarBaseDatosDisponibleAsync(cancellationToken))
-        {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new ProblemDetails
-            {
-                Status = StatusCodes.Status503ServiceUnavailable,
-                Title = "Base de Datos No Disponible",
-                Detail = "El servicio de persistencia PostgreSQL no está conectado actualmente. Por favor revise 'DefaultConnection'.",
-                Instance = HttpContext.Request.Path
-            });
-        }
 
         // 4. Mapeo explícito a entidad de dominio (Anti-Overposting)
         var entidad = new PlanillaViaje
@@ -244,16 +233,6 @@ public class PlanillasController : ControllerBase
         [FromQuery] int pageSize = 50,
         CancellationToken cancellationToken = default)
     {
-        if (_context == null || !await VerificarBaseDatosDisponibleAsync(cancellationToken))
-        {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new ProblemDetails
-            {
-                Status = StatusCodes.Status503ServiceUnavailable,
-                Title = "Base de Datos No Disponible",
-                Detail = "No se puede consultar el historial porque PostgreSQL no está conectado.",
-                Instance = HttpContext.Request.Path
-            });
-        }
 
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
@@ -306,16 +285,6 @@ public class PlanillasController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ObtenerPlanillaPorId(int id, CancellationToken cancellationToken)
     {
-        if (_context == null || !await VerificarBaseDatosDisponibleAsync(cancellationToken))
-        {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new ProblemDetails
-            {
-                Status = StatusCodes.Status503ServiceUnavailable,
-                Title = "Base de Datos No Disponible",
-                Detail = "PostgreSQL no está disponible.",
-                Instance = HttpContext.Request.Path
-            });
-        }
 
         var planilla = await _context.Planillas
             .AsNoTracking()
@@ -376,16 +345,6 @@ public class PlanillasController : ControllerBase
         [FromQuery] DateOnly? hasta,
         CancellationToken cancellationToken)
     {
-        if (_context == null || !await VerificarBaseDatosDisponibleAsync(cancellationToken))
-        {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new ProblemDetails
-            {
-                Status = StatusCodes.Status503ServiceUnavailable,
-                Title = "Base de Datos No Disponible",
-                Detail = "No se puede generar el archivo consolidado porque PostgreSQL no está conectado.",
-                Instance = HttpContext.Request.Path
-            });
-        }
 
         var memoryStream = await _excelService.GenerarConsolidadoExcelAsync(desde, hasta, cancellationToken);
 
@@ -406,16 +365,5 @@ public class PlanillasController : ControllerBase
         return Ok(ConceptoNormalizer.ObtenerCatalogo());
     }
 
-    private async Task<bool> VerificarBaseDatosDisponibleAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            return _context != null && await _context.Database.CanConnectAsync(cancellationToken);
-        }
-        catch
-        {
-            return false;
-        }
-    }
 }
 

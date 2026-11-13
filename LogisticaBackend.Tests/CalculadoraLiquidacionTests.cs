@@ -1,4 +1,4 @@
-using FluentAssertions;
+using Shouldly;
 using LogisticaBackend.Domain.Services;
 using LogisticaBackend.DTOs;
 using Xunit;
@@ -29,9 +29,9 @@ public class CalculadoraLiquidacionTests
             formula: FormulaSaldoViaje.BalanceAnticipo
         );
 
-        resultado.TotalGastos.Should().Be(2869200m);
-        resultado.SaldoViaje.Should().Be(69200m);
-        resultado.SaldoTotal.Should().Be(69200m);
+        resultado.TotalGastos.ShouldBe(2869200m);
+        resultado.SaldoViaje.ShouldBe(69200m);
+        resultado.SaldoTotal.ShouldBe(69200m);
     }
 
     [Fact]
@@ -53,9 +53,9 @@ public class CalculadoraLiquidacionTests
             formula: FormulaSaldoViaje.LiquidacionFlete
         );
 
-        resultado.TotalGastos.Should().Be(2000000m);
-        resultado.SaldoViaje.Should().Be(2000000m);
-        resultado.SaldoTotal.Should().Be(2100000m); // 2.000.000 + 100.000
+        resultado.TotalGastos.ShouldBe(2000000m);
+        resultado.SaldoViaje.ShouldBe(2000000m);
+        resultado.SaldoTotal.ShouldBe(2100000m); // 2.000.000 + 100.000
     }
 
     [Fact]
@@ -74,17 +74,17 @@ public class CalculadoraLiquidacionTests
             formula: FormulaSaldoViaje.BalanceAnticipo
         );
 
-        resultado.SaldoViaje.Should().Be(0m); // 1.000.000 - 1.000.000
-        resultado.SaldoTotal.Should().Be(-50000m);
+        resultado.SaldoViaje.ShouldBe(0m); // 1.000.000 - 1.000.000
+        resultado.SaldoTotal.ShouldBe(-50000m);
     }
 
     [Fact]
     public void RedondeoFinanciero_UsaMidpointAwayFromZero()
     {
-        CalculadoraLiquidacion.Redondear(12.505m).Should().Be(12.51m);
-        CalculadoraLiquidacion.Redondear(12.504m).Should().Be(12.50m);
-        CalculadoraLiquidacion.Redondear(100.005m).Should().Be(100.01m);
-        CalculadoraLiquidacion.Redondear(50.005m).Should().Be(50.01m);
+        CalculadoraLiquidacion.Redondear(12.505m).ShouldBe(12.51m);
+        CalculadoraLiquidacion.Redondear(12.504m).ShouldBe(12.50m);
+        CalculadoraLiquidacion.Redondear(100.005m).ShouldBe(100.01m);
+        CalculadoraLiquidacion.Redondear(50.005m).ShouldBe(50.01m);
     }
 
     [Theory]
@@ -114,11 +114,11 @@ public class CalculadoraLiquidacionTests
 
         var (esValido, mensajeError, _) = CalculadoraLiquidacion.ValidarTotalesEnviados(dto);
 
-        esValido.Should().Be(esperado);
+        esValido.ShouldBe(esperado);
         if (!esperado)
         {
-            mensajeError.Should().NotBeNullOrWhiteSpace();
-            mensajeError.Should().Contain("TotalGastos");
+            mensajeError.ShouldNotBeNullOrWhiteSpace();
+            mensajeError.ShouldContain("TotalGastos");
         }
     }
 
@@ -137,6 +137,6 @@ public class CalculadoraLiquidacionTests
     public void ParsearMonedaColombiana_FormatosVariados_ParseaCorrectamente(string? input, decimal esperado)
     {
         var resultado = CalculadoraLiquidacion.ParsearMonedaColombiana(input);
-        resultado.Should().Be(esperado);
+        resultado.ShouldBe(esperado);
     }
 }
