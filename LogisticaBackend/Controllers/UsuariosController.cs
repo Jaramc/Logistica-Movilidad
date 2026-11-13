@@ -1,6 +1,7 @@
 using LogisticaBackend.Auth;
 using LogisticaBackend.Domain.Entities;
 using LogisticaBackend.DTOs;
+using LogisticaBackend.Middleware;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -174,15 +175,9 @@ public class UsuariosController : ControllerBase
     private ObjectResult Conflicto(string detalle) =>
         Problem(statusCode: StatusCodes.Status409Conflict, title: "Operación no permitida", detail: detalle);
 
-    private static ObjectResult ErroresIdentity(IdentityResult resultado, string campo) =>
-        new(new ValidationProblemDetails(new Dictionary<string, string[]>
+    private ObjectResult ErroresIdentity(IdentityResult resultado, string campo) =>
+        Problemas.Validacion(HttpContext, new Dictionary<string, string[]>
         {
             [campo] = resultado.Errors.Select(e => e.Description).ToArray()
-        })
-        {
-            Status = StatusCodes.Status422UnprocessableEntity,
-            Title = "Error de validación",
-            Detail = "Uno o más campos no cumplen las reglas.",
-        })
-        { StatusCode = StatusCodes.Status422UnprocessableEntity };
+        });
 }

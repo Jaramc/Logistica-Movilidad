@@ -36,7 +36,7 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // 2. Manejo Global de Excepciones y ProblemDetails (RFC 7807)
-builder.Services.AddProblemDetails();
+builder.Services.AddProblemDetailsLogistica();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
 // 3. Validación de DTOs con FluentValidation
@@ -132,6 +132,7 @@ await InicializadorBaseDatos.InicializarAsync(app.Services);
 
 // Pipeline de Middleware
 app.UseExceptionHandler();
+app.UseStatusCodePages(); // 404/405/415 sin cuerpo también responden ProblemDetails en español
 
 if (app.Environment.IsDevelopment())
 {

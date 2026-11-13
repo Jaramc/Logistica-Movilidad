@@ -39,13 +39,8 @@ public sealed class ValidarAntiforgeryFilter : IAsyncAuthorizationFilter
         {
             _logger.LogWarning("Token antiforgery ausente o inválido en {Metodo} {Ruta}.",
                 context.HttpContext.Request.Method, context.HttpContext.Request.Path);
-            context.Result = new ObjectResult(new ProblemDetails
-            {
-                Status = StatusCodes.Status400BadRequest,
-                Title = "Solicitud rechazada",
-                Detail = "Falta el token de seguridad o expiró. Recargue la página e intente de nuevo.",
-            })
-            { StatusCode = StatusCodes.Status400BadRequest };
+            context.Result = Problemas.Crear(context.HttpContext, StatusCodes.Status400BadRequest,
+                "Solicitud rechazada", "Falta el token de seguridad o expiró. Recargue la página e intente de nuevo.");
         }
     }
 }

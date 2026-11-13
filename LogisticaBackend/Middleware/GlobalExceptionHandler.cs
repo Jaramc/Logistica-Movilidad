@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Azure;
 using FluentValidation;
 using Microsoft.AspNetCore.Diagnostics;
@@ -7,90 +6,78 @@ using Microsoft.AspNetCore.Mvc;
 namespace LogisticaBackend.Middleware;
 
 /// <summary>
-/// Manejador global de excepciones que asegura respuestas conformes al estándar RFC 7807 (ProblemDetails).
-/// Mitiga CWE-209 (Information Exposure through Error Messages) impidiendo fugas de trazas internas al cliente.
+/// Manejador global de excepciones (RFC 7807). Al cliente solo le llega un mensaje genérico
+/// en español y un traceId para soporte: nunca ex.Message ni el stack trace (CWE-209).
 /// </summary>
 public class GlobalExceptionHandler : IExceptionHandler
 {
+    private readonly IProblemDetailsService _problemDetails;
     private readonly ILogger<GlobalExceptionHandler> _logger;
 
-    public GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger)
+    public GlobalExceptionHandler(IProblemDetailsService problemDetails, ILogger<GlobalExceptionHandler> logger)
     {
+        _problemDetails = problemDetails;
         _logger = logger;
     }
 
-    public async ValueTask<bool> TryHandleAsync(
-        HttpContext httpContext,
-        Exception exception,
-        CancellationToken cancellationToken)
+    public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
-        var correlationId = Activity.Current?.Id ?? httpContext.TraceIdentifier;
+        var (status, titulo, detalle) = Clasificar(httpContext, exception);
+        var problema = new ProblemDetails { Status = status, Title = titulo, Detail = detalle };
 
-        _logger.LogError(
-            exception,
-            "Excepción no controlada procesada por GlobalExceptionHandler. CorrelationId: {CorrelationId}, Ruta: {Path}",
-            correlationId,
-            httpContext.Request.Path
-        );
-
-        var problemDetails = new ProblemDetails
+        if (exception is ValidationException valEx)
         {
-            Instance = httpContext.Request.Path,
-            Extensions = { ["correlationId"] = correlationId }
-        };
+            // Mensajes de FluentValidation: son textos de negocio pensados para el usuario.
+            problema.Extensions["errors"] = valEx.Errors
+                .GroupBy(e => e.PropertyName)
+                .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage).ToArray());
+        }
 
+        httpContext.Response.StatusCode = status;
+        return await _problemDetails.TryWriteAsync(new ProblemDetailsContext
+        {
+            HttpContext = httpContext,
+            ProblemDetails = problema,
+            Exception = exception,
+        });
+    }
+
+    private (int Status, string Titulo, string Detalle) Clasificar(HttpContext http, Exception exception)
+    {
         switch (exception)
         {
-            case ValidationException valEx:
-                httpContext.Response.StatusCode = StatusCodes.Status422UnprocessableEntity;
-                problemDetails.Status = StatusCodes.Status422UnprocessableEntity;
-                problemDetails.Title = "Error de Validación de Negocio";
-                problemDetails.Detail = "Uno o más campos enviados no cumplen las reglas de validación.";
-                problemDetails.Type = "https://tools.ietf.org/html/rfc4918#section-11.2";
+            case OperationCanceledException when http.RequestAborted.IsCancellationRequested:
+                // El cliente cerró la conexión: no es un error del servidor.
+                _logger.LogInformation("Solicitud cancelada por el cliente en {Ruta}.", http.Request.Path);
+                return (499, "Solicitud cancelada", "La solicitud fue cancelada.");
 
-                var errors = valEx.Errors
-                    .GroupBy(e => e.PropertyName)
-                    .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage).ToArray());
+            case ValidationException:
+                return (StatusCodes.Status422UnprocessableEntity, "Error de validación", "Uno o más campos no cumplen las reglas.");
 
-                problemDetails.Extensions["errors"] = errors;
-                break;
+            case BadHttpRequestException bad:
+                // Cuerpo demasiado grande, formulario mal formado, etc. El mensaje interno no se expone.
+                _logger.LogWarning("Solicitud HTTP inválida ({Status}) en {Ruta}.", bad.StatusCode, http.Request.Path);
+                return bad.StatusCode == StatusCodes.Status413PayloadTooLarge
+                    ? (bad.StatusCode, "Archivo o solicitud demasiado grande", "La solicitud supera el tamaño máximo permitido.")
+                    : (bad.StatusCode, "Solicitud inválida", "La solicitud no tiene el formato esperado.");
 
-            case BadHttpRequestException badHttpEx:
-                httpContext.Response.StatusCode = badHttpEx.StatusCode;
-                problemDetails.Status = badHttpEx.StatusCode;
-                problemDetails.Title = "Solicitud HTTP Inválida";
-                problemDetails.Detail = badHttpEx.Message;
-                break;
-
-            case RequestFailedException rfEx:
-                httpContext.Response.StatusCode = StatusCodes.Status502BadGateway;
-                problemDetails.Status = StatusCodes.Status502BadGateway;
-                problemDetails.Title = "Error de Comunicación con Servicio Externo de IA";
-                problemDetails.Detail = "El servicio de Azure AI Document Intelligence respondió con un error al procesar el documento.";
-                problemDetails.Type = "https://tools.ietf.org/html/rfc7231#section-6.6.3";
-                break;
+            case RequestFailedException rf:
+                // Se registra el código de Azure (sin la excepción completa, que trae el cuerpo de la respuesta).
+                _logger.LogError("Azure Document Intelligence falló. Código: {CodigoAzure}. Estado HTTP: {EstadoAzure}.",
+                    rf.ErrorCode, rf.Status);
+                return (StatusCodes.Status502BadGateway, "Servicio externo no disponible",
+                    "No fue posible procesar el documento en este momento. Intente de nuevo más tarde.");
 
             case Npgsql.NpgsqlException or TimeoutException
                 or Microsoft.EntityFrameworkCore.Storage.RetryLimitExceededException:
-                httpContext.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
-                problemDetails.Status = StatusCodes.Status503ServiceUnavailable;
-                problemDetails.Title = "Servicio no disponible";
-                problemDetails.Detail = "La base de datos no está disponible en este momento. Intente de nuevo más tarde.";
-                break;
+                _logger.LogError(exception, "Fallo de base de datos en {Ruta}.", http.Request.Path);
+                return (StatusCodes.Status503ServiceUnavailable, "Servicio no disponible",
+                    "La base de datos no está disponible en este momento. Intente de nuevo más tarde.");
 
             default:
-                httpContext.Response.StatusCode = StatusCodes.Status500InternalServerError;
-                problemDetails.Status = StatusCodes.Status500InternalServerError;
-                problemDetails.Title = "Error Interno del Servidor";
-                problemDetails.Detail = "Ocurrió un error inesperado al procesar la solicitud.";
-                problemDetails.Type = "https://tools.ietf.org/html/rfc7231#section-6.6.1";
-                break;
+                _logger.LogError(exception, "Excepción no controlada en {Metodo} {Ruta}.", http.Request.Method, http.Request.Path);
+                return (StatusCodes.Status500InternalServerError, "Error interno",
+                    "Ocurrió un error inesperado. Si persiste, comuníquese con soporte e indique el código de seguimiento.");
         }
-
-        httpContext.Response.ContentType = "application/problem+json";
-        await httpContext.Response.WriteAsJsonAsync(problemDetails, cancellationToken);
-
-        return true;
     }
 }
-

@@ -4,6 +4,7 @@ using LogisticaBackend.Auth;
 using LogisticaBackend.Configuration;
 using LogisticaBackend.Domain.Entities;
 using LogisticaBackend.DTOs;
+using LogisticaBackend.Middleware;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -306,17 +307,11 @@ public class AuthController : ControllerBase
         Problem(statusCode: StatusCodes.Status409Conflict, title: "2FA ya configurado",
             detail: "La verificación en dos pasos ya está activa. Si perdió el acceso, pida a un administrador que la reinicie.");
 
-    private ObjectResult ErroresIdentity(IdentityResult resultado, string campo)
-    {
-        var errores = new Dictionary<string, string[]> { [campo] = resultado.Errors.Select(e => e.Description).ToArray() };
-        return new ObjectResult(new ValidationProblemDetails(errores)
+    private ObjectResult ErroresIdentity(IdentityResult resultado, string campo) =>
+        Problemas.Validacion(HttpContext, new Dictionary<string, string[]>
         {
-            Status = StatusCodes.Status422UnprocessableEntity,
-            Title = "Error de validación",
-            Detail = "Uno o más campos no cumplen las reglas.",
-        })
-        { StatusCode = StatusCodes.Status422UnprocessableEntity };
-    }
+            [campo] = resultado.Errors.Select(e => e.Description).ToArray()
+        });
 
     private static string NormalizarCodigoTotp(string codigo) =>
         new string(codigo.Where(char.IsDigit).ToArray());

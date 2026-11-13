@@ -27,13 +27,7 @@ public sealed class ValidacionFluentFilter : IAsyncActionFilter
                 .GroupBy(e => e.PropertyName)
                 .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage).Distinct().ToArray());
 
-            context.Result = new ObjectResult(new ValidationProblemDetails(errores)
-            {
-                Status = StatusCodes.Status422UnprocessableEntity,
-                Title = "Error de validación",
-                Detail = "Uno o más campos no cumplen las reglas.",
-            })
-            { StatusCode = StatusCodes.Status422UnprocessableEntity };
+            context.Result = Problemas.Validacion(context.HttpContext, errores);
             return;
         }
 

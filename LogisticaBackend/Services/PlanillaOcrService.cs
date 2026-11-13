@@ -50,7 +50,8 @@ public class PlanillaOcrService : IPlanillaOcrService
         }
         catch (RequestFailedException rfEx)
         {
-            _logger.LogError(rfEx, "Fallo al comunicar con Azure Document Intelligence. Código: {ErrorCode}, Status: {Status}", rfEx.ErrorCode, rfEx.Status);
+            // Solo el código y el estado: la excepción completa incluye el cuerpo de la respuesta de Azure.
+            _logger.LogWarning("Azure Document Intelligence rechazó el análisis. Código: {ErrorCode}. Estado: {Status}.", rfEx.ErrorCode, rfEx.Status);
             throw;
         }
 
