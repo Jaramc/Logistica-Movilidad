@@ -240,7 +240,7 @@ public class PlanillasControllerTests
         _excelServiceMock.Setup(e => e.GenerarConsolidadoExcelAsync(It.IsAny<DateOnly?>(), It.IsAny<DateOnly?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new MemoryStream(new byte[] { 1, 2, 3 }));
 
-        var result = await controller.DescargarConsolidado(null, null, CancellationToken.None);
+        var result = await controller.DescargarConsolidado(new RangoFechasDescargaDto { Desde = new DateOnly(2026, 1, 1), Hasta = new DateOnly(2026, 6, 30) }, CancellationToken.None);
 
         result.ShouldBeOfType<FileStreamResult>();
         var fileResult = (FileStreamResult)result;

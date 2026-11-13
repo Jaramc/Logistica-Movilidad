@@ -1,4 +1,6 @@
 using FluentValidation;
+using LogisticaBackend.Auth;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -41,6 +43,7 @@ public class PlanillasController : ControllerBase
     /// No depende de la disponibilidad de la base de datos PostgreSQL.
     /// </summary>
     [HttpPost("extraer")]
+    [Authorize(Policy = Politicas.PuedeRevisar)]
     [EnableRateLimiting("ocr_policy")]
     [RequestSizeLimit(FileValidationService.TamanoMaximoBytes)]
     [Consumes("multipart/form-data")]
@@ -81,6 +84,7 @@ public class PlanillasController : ControllerBase
     /// Recalcula autoritativamente los totales y rechaza inconsistencias mayores a 0.01.
     /// </summary>
     [HttpPost]
+    [Authorize(Policy = Politicas.PuedeRevisar)]
     [Consumes("application/json")]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
@@ -226,6 +230,7 @@ public class PlanillasController : ControllerBase
     /// Consulta el historial paginado de planillas aprobadas.
     /// </summary>
     [HttpGet]
+    [Authorize(Policy = Politicas.PuedeLeer)]
     [ProducesResponseType(typeof(PagedResultDto<PlanillaResumenDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> ObtenerHistorial(
@@ -281,6 +286,7 @@ public class PlanillasController : ControllerBase
     /// Consulta el detalle individual de una planilla con sus renglones de gastos.
     /// </summary>
     [HttpGet("{id:int}")]
+    [Authorize(Policy = Politicas.PuedeLeer)]
     [ProducesResponseType(typeof(PlanillaDetalleDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ObtenerPlanillaPorId(int id, CancellationToken cancellationToken)
@@ -337,21 +343,21 @@ public class PlanillasController : ControllerBase
     /// Genera y descarga el consolidado en Excel en formato streaming (evitando LOH).
     /// </summary>
     [HttpGet("descargar-consolidado")]
+    [Authorize(Policy = Politicas.SoloAdministrador)]
     [Produces("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> DescargarConsolidado(
-        [FromQuery] DateOnly? desde,
-        [FromQuery] DateOnly? hasta,
+        [FromQuery] RangoFechasDescargaDto rango,
         CancellationToken cancellationToken)
     {
 
-        var memoryStream = await _excelService.GenerarConsolidadoExcelAsync(desde, hasta, cancellationToken);
+        var memoryStream = await _excelService.GenerarConsolidadoExcelAsync(rango.Desde, rango.Hasta, cancellationToken);
 
         return File(
             fileStream: memoryStream,
             contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            fileDownloadName: $"Consolidado_Planillas_{DateTime.UtcNow:yyyyMMdd_HHmmss}.xlsx"
+            fileDownloadName: $"Consolidado_Planillas_{rango.Desde:yyyyMMdd}_{rango.Hasta:yyyyMMdd}.xlsx"
         );
     }
 
@@ -359,6 +365,7 @@ public class PlanillasController : ControllerBase
     /// Retorna el catálogo canónico de las 16 categorías fijas de gastos para autocompletado del frontend.
     /// </summary>
     [HttpGet("conceptos")]
+    [Authorize(Policy = Politicas.PuedeLeer)]
     [ProducesResponseType(typeof(IReadOnlyList<ConceptoCanonicoDto>), StatusCodes.Status200OK)]
     public IActionResult ObtenerCatalogoConceptos()
     {
