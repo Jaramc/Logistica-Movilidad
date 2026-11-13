@@ -30,29 +30,10 @@ export async function extraerPlanillaOcrApi(
   });
 
   // Validación estricta en el borde (Runtime Boundary Validation con Zod)
+  // Validación estricta en el borde: si el contrato no coincide, se informa el error (sin "respaldos" legacy).
   const parseResult = PlanillaOcrResponseSchema.safeParse(rawResponse);
   if (!parseResult.success) {
-    console.error('Error de contrato al validar respuesta de OCR:', parseResult.error);
-    const fallbackData = (rawResponse as any)?.data || (rawResponse as any)?.datos || {};
-    return {
-      mensaje: (rawResponse as any)?.mensaje ?? 'Datos procesados parcialmente',
-      advertencias: (rawResponse as any)?.advertencias ?? [],
-      data: {
-        placa: String(fallbackData.placa ?? '').toUpperCase(),
-        origen: String(fallbackData.origen ?? fallbackData.origenViaje ?? ''),
-        destino: String(fallbackData.destino ?? ''),
-        flete: Number(fallbackData.flete ?? 0),
-        anticipo: Number(fallbackData.anticipo ?? 0),
-        totalGastos: Number(fallbackData.totalGastos ?? 0),
-        saldoViaje: Number(fallbackData.saldoViaje ?? 0),
-        detalleGastos: Array.isArray(fallbackData.detalleGastos)
-          ? fallbackData.detalleGastos.map((g: any) => ({
-              concepto: String(g.concepto || g.Concepto || 'Gasto'),
-              valor: Number(g.valor || g.Valor || 0),
-            }))
-          : [],
-      },
-    };
+    throw new Error('La respuesta del OCR no tiene el formato esperado.');
   }
 
   return parseResult.data;

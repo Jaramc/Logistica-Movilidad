@@ -8,7 +8,7 @@ import DescargarReporte from './DescargarReporte';
 import { Button } from './ui/Button';
 import { Alert } from './ui/Alert';
 
-export const HistorialLiquidaciones: React.FC = () => {
+export const HistorialLiquidaciones: React.FC<{ puedeDescargar?: boolean }> = ({ puedeDescargar = false }) => {
   const [page, setPage] = useState(1);
   const pageSize = 20;
 
@@ -44,7 +44,8 @@ export const HistorialLiquidaciones: React.FC = () => {
             Refrescar
           </Button>
 
-          <DescargarReporte />
+          {/* Solo Administrador. Ocultarlo es comodidad: el backend responde 403 a los demás roles. */}
+          {puedeDescargar && <DescargarReporte />}
         </div>
       </div>
 

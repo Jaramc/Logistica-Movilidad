@@ -11,6 +11,32 @@ export const CSRF_COOKIE = 'XSRF-TOKEN';
 export const CSRF_HEADER = 'X-XSRF-TOKEN';
 const METODOS_SEGUROS = new Set(['GET', 'HEAD', 'OPTIONS', 'TRACE']);
 
+/**
+ * Rutas donde un 401 es una respuesta normal (credenciales incorrectas o sin sesión todavía)
+ * y NO significa que la sesión haya expirado.
+ */
+const RUTAS_401_ESPERADO = [
+  '/api/auth/login',
+  '/api/auth/login-2fa',
+  '/api/auth/login-recuperacion',
+  '/api/auth/me',
+];
+
+type OyenteSesion = () => void;
+const oyentesSesionExpirada = new Set<OyenteSesion>();
+
+/** Se suscribe al evento "la sesión expiró" (401 en una ruta protegida). Devuelve la función para desuscribirse. */
+export function alExpirarSesion(oyente: OyenteSesion): () => void {
+  oyentesSesionExpirada.add(oyente);
+  return () => oyentesSesionExpirada.delete(oyente);
+}
+
+function notificarSesionExpirada(endpoint: string): void {
+  const ruta = endpoint.split('?')[0];
+  if (RUTAS_401_ESPERADO.includes(ruta ?? '')) return;
+  oyentesSesionExpirada.forEach((oyente) => oyente());
+}
+
 /** Lee la cookie XSRF-TOKEN que entrega el backend (no es HttpOnly a propósito). */
 export function leerTokenCsrf(): string | null {
   const par = document.cookie
@@ -104,6 +130,7 @@ export async function apiClient<T>(endpoint: string, options: FetchOptions = {})
     clearTimeout(timeoutId);
 
     if (!respuesta.ok) {
+      if (respuesta.status === 401) notificarSesionExpirada(endpoint);
       await parsearYRechazarError(respuesta);
     }
 
