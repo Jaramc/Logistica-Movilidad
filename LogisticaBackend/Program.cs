@@ -104,6 +104,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(o =>
 const long TamanoMaximoCuerpo = 1024 * 1024;
 builder.WebHost.ConfigureKestrel(k =>
 {
+    k.AddServerHeader = false; // no revelar el servidor
     k.Limits.MaxRequestBodySize = TamanoMaximoCuerpo;
     k.Limits.MaxRequestHeadersTotalSize = 32 * 1024;
     k.Limits.RequestHeadersTimeout = TimeSpan.FromSeconds(30);
@@ -117,20 +118,38 @@ builder.Services.Configure<FormOptions>(o =>
     o.MemoryBufferThreshold = 64 * 1024;
 });
 
-// 10. CORS Restringido a Orígenes de Frontend Autorizados
+// 10. CORS: orígenes desde Cors:OrigenesPermitidos, sin comodines. Con el despliegue en el mismo
+// origen (Caddy) la lista puede quedar vacía: el navegador no necesita CORS.
+var origenesPermitidos = builder.Configuration.GetSection("Cors:OrigenesPermitidos").Get<string[]>() ?? Array.Empty<string>();
+if (origenesPermitidos.Any(o => o.Contains('*')))
+{
+    throw new InvalidOperationException("Cors:OrigenesPermitidos no admite comodines.");
+}
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("PermitirReact", policy =>
+    options.AddPolicy(PoliticaCors, policy =>
     {
-        policy.WithOrigins("http://localhost:5173", "http://localhost:3000")
-              .AllowAnyHeader()
-              .AllowAnyMethod();
+        policy.WithOrigins(origenesPermitidos)
+              .AllowCredentials()
+              .WithMethods("GET", "POST", "PUT", "DELETE")
+              .WithHeaders("Content-Type", "Accept", ConfiguracionAntiforgery.NombreEncabezado)
+              .WithExposedHeaders("Retry-After", "Content-Disposition")
+              .SetPreflightMaxAge(TimeSpan.FromMinutes(10));
     });
+});
+
+// 11. HSTS fuera de Development (Caddy termina TLS; X-Forwarded-Proto evita bucles de redirección).
+builder.Services.AddHsts(o =>
+{
+    o.MaxAge = TimeSpan.FromDays(365);
+    o.IncludeSubDomains = true;
+    o.Preload = false;
 });
 
 var app = builder.Build();
 
 app.UseForwardedHeaders(); // primero: el resto del pipeline ve la IP real
+app.UseEncabezadosSeguridad(app.Environment);
 
 // Falla rápido: sin cadena de conexión válida la aplicación no arranca.
 ValidadorConfiguracion.ObtenerCadenaConexion(app.Configuration, app.Environment);
@@ -149,8 +168,12 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseHttpsRedirection();
-app.UseCors("PermitirReact");
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+    app.UseHttpsRedirection();
+}
+app.UseCors(PoliticaCors);
 
 app.UseAuthentication();
 app.UseRateLimiter(); // después de autenticar: los límites por usuario usan la sesión
@@ -165,4 +188,7 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check 
 await app.RunAsync();
 
 // Expuesto para WebApplicationFactory en las pruebas de integración.
-public partial class Program;
+public partial class Program
+{
+    private const string PoliticaCors = "Frontend";
+}
