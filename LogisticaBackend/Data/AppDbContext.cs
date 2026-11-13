@@ -1,10 +1,12 @@
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using LogisticaBackend.Domain.Entities;
 using LogisticaBackend.Data.Configurations;
 
 namespace LogisticaBackend.Data;
 
-public class AppDbContext : DbContext
+public class AppDbContext : IdentityDbContext<Usuario, IdentityRole<Guid>, Guid>
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
     {
@@ -19,5 +21,14 @@ public class AppDbContext : DbContext
 
         modelBuilder.ApplyConfiguration(new PlanillaViajeConfiguration());
         modelBuilder.ApplyConfiguration(new GastoDetalleConfiguration());
+        modelBuilder.ApplyConfiguration(new UsuarioConfiguration());
+
+        // Tablas de Identity con nombres en español y snake_case.
+        modelBuilder.Entity<IdentityRole<Guid>>().ToTable("roles");
+        modelBuilder.Entity<IdentityUserRole<Guid>>().ToTable("usuarios_roles");
+        modelBuilder.Entity<IdentityUserClaim<Guid>>().ToTable("usuarios_claims");
+        modelBuilder.Entity<IdentityUserLogin<Guid>>().ToTable("usuarios_logins");
+        modelBuilder.Entity<IdentityUserToken<Guid>>().ToTable("usuarios_tokens");
+        modelBuilder.Entity<IdentityRoleClaim<Guid>>().ToTable("roles_claims");
     }
 }

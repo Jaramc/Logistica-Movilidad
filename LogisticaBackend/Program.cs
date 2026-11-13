@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using LogisticaBackend.Auth;
 using LogisticaBackend.Configuration;
 using LogisticaBackend.Data;
 using LogisticaBackend.Interfaces;
@@ -17,7 +18,7 @@ using LogisticaBackend.Validators;
 var builder = WebApplication.CreateBuilder(args);
 
 // 1. Controladores y Swagger
-builder.Services.AddControllers();
+builder.Services.AddControllers(o => o.Filters.Add<ValidacionFluentFilter>());
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -64,8 +65,11 @@ builder.Services.AddScoped<IExcelExportService, ExcelExportService>();
 
 // 7. Base de Datos PostgreSQL con Entity Framework Core (obligatoria).
 // En Production se niega a arrancar si falta la cadena o contiene valores de ejemplo.
-var connectionString = ValidadorConfiguracion.ObtenerCadenaConexion(builder.Configuration, builder.Environment);
-builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
+builder.Services.AddDbContext<AppDbContext>((sp, options) => options.UseNpgsql(
+    ValidadorConfiguracion.ObtenerCadenaConexion(sp.GetRequiredService<IConfiguration>(), sp.GetRequiredService<IHostEnvironment>())));
+
+// 7b. Identidad: ASP.NET Core Identity + cookie de sesión + 2FA obligatorio + políticas.
+builder.Services.AddIdentidadLogistica(builder.Configuration);
 
 // 8. Health Checks para Monitoreo de Liveness y Readiness
 builder.Services.AddHealthChecks()
@@ -113,6 +117,10 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Falla rápido: sin cadena de conexión válida la aplicación no arranca.
+ValidadorConfiguracion.ObtenerCadenaConexion(app.Configuration, app.Environment);
+await InicializadorBaseDatos.InicializarAsync(app.Services);
+
 // Pipeline de Middleware
 app.UseExceptionHandler();
 
@@ -129,15 +137,16 @@ app.UseHttpsRedirection();
 app.UseCors("PermitirReact");
 app.UseRateLimiter();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 
 // Endpoints de Health Check
-app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
-app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false }).AllowAnonymous();
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") }).AllowAnonymous();
 
-app.Run();
+await app.RunAsync();
 
 // Expuesto para WebApplicationFactory en las pruebas de integración.
 public partial class Program;
