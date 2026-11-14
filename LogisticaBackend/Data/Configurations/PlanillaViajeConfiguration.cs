@@ -63,7 +63,9 @@ public class PlanillaViajeConfiguration : IEntityTypeConfiguration<PlanillaViaje
             .HasColumnName("estado_revision")
             .HasConversion<string>()
             .HasMaxLength(20)
-            .HasDefaultValue(EstadoRevision.Aprobado);
+            // Sin valor por defecto en la base: el servidor SIEMPRE asigna el estado. Con un default
+            // 'Aprobado', una planilla en 'Pendiente' (valor CLR por defecto) quedaría aprobada en silencio.
+            .IsRequired();
 
         builder.Property(x => x.JsonOcrCrudo)
             .HasColumnName("json_ocr_crudo")

@@ -123,10 +123,8 @@ namespace LogisticaBackend.Data.Migrations
 
                     b.Property<string>("EstadoRevision")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
-                        .HasDefaultValue("Aprobado")
                         .HasColumnName("estado_revision");
 
                     b.Property<DateOnly>("FechaFinal")

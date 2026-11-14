@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace LogisticaBackend.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20261113223445_Inicial")]
+    [Migration("20261114015841_Inicial")]
     partial class Inicial
     {
         /// <inheritdoc />
@@ -126,10 +126,8 @@ namespace LogisticaBackend.Data.Migrations
 
                     b.Property<string>("EstadoRevision")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
-                        .HasDefaultValue("Aprobado")
                         .HasColumnName("estado_revision");
 
                     b.Property<DateOnly>("FechaFinal")

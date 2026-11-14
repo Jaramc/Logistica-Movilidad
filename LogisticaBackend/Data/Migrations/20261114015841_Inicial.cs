@@ -119,7 +119,7 @@ namespace LogisticaBackend.Data.Migrations
                     saldo_viaje = table.Column<decimal>(type: "numeric(14,2)", precision: 14, scale: 2, nullable: false, defaultValue: 0m),
                     saldo_anterior = table.Column<decimal>(type: "numeric(14,2)", precision: 14, scale: 2, nullable: false, defaultValue: 0m),
                     saldo_total = table.Column<decimal>(type: "numeric(14,2)", precision: 14, scale: 2, nullable: false, defaultValue: 0m),
-                    estado_revision = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "Aprobado"),
+                    estado_revision = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
                     json_ocr_crudo = table.Column<string>(type: "jsonb", nullable: true),
                     creado_en = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
                     actualizado_en = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
