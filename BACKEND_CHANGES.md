@@ -1,3 +1,5 @@
+> **Documento histórico** de la refactorización previa a la fase de seguridad. Varias decisiones cambiaron después (por ejemplo, ya no se valida con 422 que los totales del cliente coincidan: el servidor siempre los recalcula y el script SQL idempotente se reemplazó por migraciones). La referencia vigente es [SECURITY.md](SECURITY.md) y los README.
+
 # Bitácora de Cambios del Backend (.NET 10 / ASP.NET Core)
 **Proyecto:** Logística y Movilidad: Sistema de Digitalización y Liquidación de Planillas de Gastos  
 **Fecha:** Noviembre de 2026  

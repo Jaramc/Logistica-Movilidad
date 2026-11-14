@@ -100,5 +100,7 @@ Copiar `.env.example` a `.env`:
 
 ```env
 # URL base del Backend (ASP.NET Core Kestrel)
-VITE_API_URL=http://localhost:5098
+# Vacío: mismo origen (proxy de Vite en desarrollo, Caddy en producción)
+VITE_API_URL=
+VITE_PROXY_TARGET=https://localhost:7216
 ```
