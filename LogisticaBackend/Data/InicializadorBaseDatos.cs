@@ -82,8 +82,8 @@ public static class InicializadorBaseDatos
     }
 
     /// <summary>
-    /// Si el único usuario es el administrador inicial, sigue pendiente de activación y su contraseña
-    /// temporal venció o se usó sin completar la activación, nadie podría generarle otra. En ese caso,
+    /// Si el único usuario es el administrador inicial, no completó la activación (2FA y cambio de
+    /// contraseña) y su contraseña temporal venció o se usó, nadie podría generarle otra. En ese caso,
     /// y solo si ADMIN_INICIAL_EMAIL coincide y ADMIN_INICIAL_PASSWORD está definida, se renueva.
     /// </summary>
     private static async Task RenovarAdministradorInicialVencidoAsync(UserManager<Usuario> userManager, TimeProvider reloj,
@@ -94,7 +94,11 @@ public static class InicializadorBaseDatos
 
         var admin = await userManager.FindByEmailAsync(email.Trim());
         var ahora = reloj.GetUtcNow().UtcDateTime;
-        if (admin is null || !admin.PendienteActivacion || !admin.DebeCambiarPassword || admin.PasswordTemporalVigente(ahora)) return;
+        // Activación incompleta = sin 2FA o con la contraseña temporal aún sin cambiar. Si configuró el 2FA
+        // pero perdió la sesión antes de cambiar la contraseña, la temporal ya está consumida y nadie más
+        // puede generarle otra: también se renueva (conserva su 2FA ya configurado).
+        var activacionIncompleta = admin is not null && (admin.PendienteActivacion || admin.DebeCambiarPassword);
+        if (admin is null || !activacionIncompleta || admin.PasswordTemporalVigente(ahora)) return;
 
         var token = await userManager.GeneratePasswordResetTokenAsync(admin);
         var resultado = await userManager.ResetPasswordAsync(admin, token, password);
