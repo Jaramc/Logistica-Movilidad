@@ -1,0 +1,931 @@
+{
+  "_descripcion": "Paso 0: respuesta real de Azure Document Intelligence para la planilla Cliente Ejemplo (13-06-26 a 19-06-26). Generado el 2026-11-20.",
+  "modelo": {
+    "modelId": "planillas-gastos-v1",
+    "createdDateTime": "2026-11-04T18:37:49Z",
+    "apiVersionDeEntrenamiento": "2024-11-30",
+    "buildMode": "template",
+    "fieldSchema": {
+      "DetalleGastos": {
+        "type": "array",
+        "columnas": {
+          "Concepto": "string",
+          "Valor": "string"
+        }
+      }
+    }
+  },
+  "analisisSdk": {
+    "_nota": "Lo que ve el backend: Azure.AI.FormRecognizer 4.1.0 llama con api-version 2023-07-31.",
+    "apiVersion": "2023-07-31",
+    "confianzaDocumento": 0.751,
+    "keyValuePairs": 0,
+    "campos": [
+      {
+        "nombre": "DetalleGastos",
+        "fieldType": "array",
+        "content": null,
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[0].Concepto",
+        "fieldType": "string",
+        "content": "EMPRESA TRANSPORTADORA",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[0].Valor",
+        "fieldType": "string",
+        "content": "Cliente Ejemplo",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[1].Concepto",
+        "fieldType": "string",
+        "content": "ORIGEN",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[1].Valor",
+        "fieldType": "string",
+        "content": "Buenaventura",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[2].Concepto",
+        "fieldType": "string",
+        "content": "DESTINO",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[2].Valor",
+        "fieldType": "string",
+        "content": "Medellín",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[3].Concepto",
+        "fieldType": "string",
+        "content": "FECHA INICIO",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[3].Valor",
+        "fieldType": "string",
+        "content": "13-06-26",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[4].Concepto",
+        "fieldType": "string",
+        "content": "FECHA FIN",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[4].Valor",
+        "fieldType": "string",
+        "content": "19-06-26",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[5].Concepto",
+        "fieldType": "string",
+        "content": "FLETE",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[5].Valor",
+        "fieldType": "string",
+        "content": "6'976.800",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[6].Concepto",
+        "fieldType": "string",
+        "content": "PLACA",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[6].Valor",
+        "fieldType": "string",
+        "content": "514",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[7].Concepto",
+        "fieldType": "string",
+        "content": "ANTICIPO",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[7].Valor",
+        "fieldType": "string",
+        "content": "2'800.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[8].Concepto",
+        "fieldType": "string",
+        "content": "PORCENTAJE",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[8].Valor",
+        "fieldType": "string",
+        "content": "697.600",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[9].Concepto",
+        "fieldType": "string",
+        "content": "PARQUEO",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[9].Valor",
+        "fieldType": "string",
+        "content": "178.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[10].Concepto",
+        "fieldType": "string",
+        "content": "2 codos vigias",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[10].Valor",
+        "fieldType": "string",
+        "content": "30.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[11].Concepto",
+        "fieldType": "string",
+        "content": null,
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[11].Valor",
+        "fieldType": "string",
+        "content": "32.900",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[12].Concepto",
+        "fieldType": "string",
+        "content": "CARGUE",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[12].Valor",
+        "fieldType": "string",
+        "content": "150.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[13].Concepto",
+        "fieldType": "string",
+        "content": "DESCARGUE",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[13].Valor",
+        "fieldType": "string",
+        "content": "140 .000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[14].Concepto",
+        "fieldType": "string",
+        "content": "Esparrago y Sacada da\notro reventado",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[14].Valor",
+        "fieldType": "string",
+        "content": "48.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[15].Concepto",
+        "fieldType": "string",
+        "content": "Iniciada\nBaterias",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[15].Valor",
+        "fieldType": "string",
+        "content": "80,000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[16].Concepto",
+        "fieldType": "string",
+        "content": "Refrigerante",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[16].Valor",
+        "fieldType": "string",
+        "content": "76.200",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[17].Concepto",
+        "fieldType": "string",
+        "content": "Reparada radiador",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[17].Valor",
+        "fieldType": "string",
+        "content": "416.500",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[18].Concepto",
+        "fieldType": "string",
+        "content": "liga CDA",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[18].Valor",
+        "fieldType": "string",
+        "content": "50.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[19].Concepto",
+        "fieldType": "string",
+        "content": "Entornado\nContenedor",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[19].Valor",
+        "fieldType": "string",
+        "content": "31.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[20].Concepto",
+        "fieldType": "string",
+        "content": "BÁSICO Retenedor y diafrain",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[20].Valor",
+        "fieldType": "string",
+        "content": "109.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[21].Concepto",
+        "fieldType": "string",
+        "content": "Pago tecnico mecânica",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[21].Valor",
+        "fieldType": "string",
+        "content": "489.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[22].Concepto",
+        "fieldType": "string",
+        "content": "arreglo y puesta de luces y conector",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[22].Valor",
+        "fieldType": "string",
+        "content": "42.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[23].Concepto",
+        "fieldType": "string",
+        "content": "Pago badaggie Contenedor",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[23].Valor",
+        "fieldType": "string",
+        "content": "130.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[24].Concepto",
+        "fieldType": "string",
+        "content": "farola luz siop Cabezota",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[24].Valor",
+        "fieldType": "string",
+        "content": "119.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[25].Concepto",
+        "fieldType": "string",
+        "content": "TOTAL GASTOS",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[25].Valor",
+        "fieldType": "string",
+        "content": "2'869.200",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[26].Concepto",
+        "fieldType": "string",
+        "content": "SALDO ANTERIOR",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[26].Valor",
+        "fieldType": "string",
+        "content": "63.500",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[27].Concepto",
+        "fieldType": "string",
+        "content": "SALDO VIAJE",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[27].Valor",
+        "fieldType": "string",
+        "content": "69.200",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[28].Concepto",
+        "fieldType": "string",
+        "content": "SALDO NUEVO",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[28].Valor",
+        "fieldType": "string",
+        "content": "5.700",
+        "confidence": null
+      }
+    ]
+  },
+  "analisis20241130": {
+    "apiVersion": "2024-11-30",
+    "confianzaDocumento": 0.834,
+    "campos": [
+      {
+        "nombre": "DetalleGastos",
+        "fieldType": "array",
+        "content": null,
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[0].Concepto",
+        "fieldType": "string",
+        "content": "EMPRESA TRANSPORTADORA",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[0].Valor",
+        "fieldType": "string",
+        "content": "Cliente Ejemplo",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[1].Concepto",
+        "fieldType": "string",
+        "content": "ORIGEN",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[1].Valor",
+        "fieldType": "string",
+        "content": "Buenaventura",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[2].Concepto",
+        "fieldType": "string",
+        "content": "DESTINO",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[2].Valor",
+        "fieldType": "string",
+        "content": "Medellín",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[3].Concepto",
+        "fieldType": "string",
+        "content": "FECHA INICIO",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[3].Valor",
+        "fieldType": "string",
+        "content": "13-06-26",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[4].Concepto",
+        "fieldType": "string",
+        "content": "FECHA FIN",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[4].Valor",
+        "fieldType": "string",
+        "content": "19-06-26",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[5].Concepto",
+        "fieldType": "string",
+        "content": "FLETE",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[5].Valor",
+        "fieldType": "string",
+        "content": "6'976.800",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[6].Concepto",
+        "fieldType": "string",
+        "content": "PLACA",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[6].Valor",
+        "fieldType": "string",
+        "content": "514",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[7].Concepto",
+        "fieldType": "string",
+        "content": "ANTICIPO",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[7].Valor",
+        "fieldType": "string",
+        "content": "2800.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[8].Concepto",
+        "fieldType": "string",
+        "content": "PORCENTAJE",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[8].Valor",
+        "fieldType": "string",
+        "content": "697.600",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[9].Concepto",
+        "fieldType": "string",
+        "content": "PARQUEO",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[9].Valor",
+        "fieldType": "string",
+        "content": "178.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[10].Concepto",
+        "fieldType": "string",
+        "content": null,
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[10].Valor",
+        "fieldType": "string",
+        "content": "32. 900",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[11].Concepto",
+        "fieldType": "string",
+        "content": "2 codos vigias",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[11].Valor",
+        "fieldType": "string",
+        "content": "30.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[12].Concepto",
+        "fieldType": "string",
+        "content": "CARGUE",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[12].Valor",
+        "fieldType": "string",
+        "content": "150.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[13].Concepto",
+        "fieldType": "string",
+        "content": "DESCARGUE",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[13].Valor",
+        "fieldType": "string",
+        "content": "140.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[14].Concepto",
+        "fieldType": "string",
+        "content": "Esparrago y Sacada de\notro reventado",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[14].Valor",
+        "fieldType": "string",
+        "content": "48.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[15].Concepto",
+        "fieldType": "string",
+        "content": "Iniciado\nBaterias",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[15].Valor",
+        "fieldType": "string",
+        "content": "80.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[16].Concepto",
+        "fieldType": "string",
+        "content": "Refrigerante",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[16].Valor",
+        "fieldType": "string",
+        "content": "76.200",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[17].Concepto",
+        "fieldType": "string",
+        "content": "Reparada radiador",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[17].Valor",
+        "fieldType": "string",
+        "content": "416.500",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[18].Concepto",
+        "fieldType": "string",
+        "content": "liga CDA",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[18].Valor",
+        "fieldType": "string",
+        "content": "50.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[19].Concepto",
+        "fieldType": "string",
+        "content": "Entornado\nContenedor",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[19].Valor",
+        "fieldType": "string",
+        "content": "31.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[20].Concepto",
+        "fieldType": "string",
+        "content": "Retenedor y diafrain\na",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[20].Valor",
+        "fieldType": "string",
+        "content": "109.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[21].Concepto",
+        "fieldType": "string",
+        "content": "Pago tecnico mecânica",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[21].Valor",
+        "fieldType": "string",
+        "content": "489.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[22].Concepto",
+        "fieldType": "string",
+        "content": "arreglo y puesta de luces y cc\nnoctor",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[22].Valor",
+        "fieldType": "string",
+        "content": "42.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[23].Concepto",
+        "fieldType": "string",
+        "content": "Pago bodegaje Contenedor",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[23].Valor",
+        "fieldType": "string",
+        "content": "130.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[24].Concepto",
+        "fieldType": "string",
+        "content": "farola luz Sior Cabezota",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[24].Valor",
+        "fieldType": "string",
+        "content": "119.000",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[25].Concepto",
+        "fieldType": "string",
+        "content": "TOTAL GASTOS",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[25].Valor",
+        "fieldType": "string",
+        "content": "2'869. 200",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[26].Concepto",
+        "fieldType": "string",
+        "content": "SALDO ANTERIOR",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[26].Valor",
+        "fieldType": "string",
+        "content": "63.500",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[27].Concepto",
+        "fieldType": "string",
+        "content": "SALDO VIAJE",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[27].Valor",
+        "fieldType": "string",
+        "content": "69.200",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[28].Concepto",
+        "fieldType": "string",
+        "content": "SALDO NUEVO",
+        "confidence": null
+      },
+      {
+        "nombre": "DetalleGastos[28].Valor",
+        "fieldType": "string",
+        "content": "5.700",
+        "confidence": null
+      }
+    ]
+  },
+  "tablaLayout": {
+    "_nota": "tables[0] de la misma respuesta (sin costo adicional): conserva las etiquetas impresas y el texto a favor de.",
+    "filas": [
+      [
+        "LOGISTICA Y MOVILIDAD S.A.S NIT 901.577.535-3",
+        "",
+        "",
+        ""
+      ],
+      [
+        "",
+        "PLANILLA DE GASTOS CONDUCTOR",
+        "",
+        ""
+      ],
+      [
+        "EMPRESA TRANSPORTADORA",
+        "Cliente Ejemplo",
+        "",
+        ""
+      ],
+      [
+        "ORIGEN",
+        "Buenaventura",
+        "DESTINO",
+        "Medellín"
+      ],
+      [
+        "FECHA INICIO",
+        "13-06-26",
+        "FECHA FIN",
+        "19-06-26"
+      ],
+      [
+        "Nº MANIFIESTO",
+        "",
+        "FLETE",
+        "6'976.800"
+      ],
+      [
+        "PLACA",
+        "Sin 514",
+        "ANTICIPO",
+        "2800.000"
+      ],
+      [
+        "GASTOS",
+        "",
+        "",
+        ""
+      ],
+      [
+        "PORCENTAJE",
+        "697.600",
+        "",
+        ""
+      ],
+      [
+        "PARQUEO",
+        "178.000",
+        "",
+        ""
+      ],
+      [
+        "PEAJES",
+        "32. 900",
+        "",
+        ""
+      ],
+      [
+        "COMISION 2 codos vigias",
+        "30.000",
+        "",
+        ""
+      ],
+      [
+        "CARGUE",
+        "150.000",
+        "",
+        ""
+      ],
+      [
+        "DESCARGUE",
+        "140.000",
+        "",
+        ""
+      ],
+      [
+        "ASSO Esparrago y Sacada de",
+        "otro reventado 48.000",
+        "",
+        ""
+      ],
+      [
+        "CARRADA Y DESCARPADA Iniciado",
+        "Baterias 80.000",
+        "",
+        ""
+      ],
+      [
+        "MONTALLANTAS Refrigerante",
+        "76.200",
+        "",
+        ""
+      ],
+      [
+        "ENGRASE Reparada radiador",
+        "416.500",
+        "",
+        ""
+      ],
+      [
+        "ACPM / COMBUSTIBLE liga CDA",
+        "50.000",
+        "",
+        ""
+      ],
+      [
+        "PAPELERIA Y PASAJES Entornado",
+        "Contenedor 31.000",
+        "",
+        ""
+      ],
+      [
+        "BASICO Retenedor y diafrain",
+        "a 109.000",
+        "",
+        ""
+      ],
+      [
+        "OTROS Pago tecnico mecânica",
+        "489.000",
+        "",
+        ""
+      ],
+      [
+        "arreglo y puesta de luces y cc",
+        "noctor 42.000",
+        "",
+        ""
+      ],
+      [
+        "Pago bodegaje Contenedor",
+        "130.000",
+        "",
+        ""
+      ],
+      [
+        "",
+        "OBSERVACIONES",
+        "",
+        ""
+      ],
+      [
+        "farola luz Sior Cabezota 119.000",
+        "",
+        "",
+        ""
+      ],
+      [
+        "",
+        "",
+        "",
+        ""
+      ],
+      [
+        "",
+        "",
+        "",
+        ""
+      ],
+      [
+        "SALDOS",
+        "",
+        "",
+        ""
+      ],
+      [
+        "TOTAL GASTOS",
+        "2'869. 200",
+        "SALDO ANTERIOR",
+        "63.500 Empresa"
+      ],
+      [
+        "SALDO VIAJE",
+        "69.200 Pedro",
+        "SALDO NUEVO",
+        "5.700 Pedro"
+      ]
+    ]
+  }
+}
