@@ -274,7 +274,13 @@ public class PlanillaOcrServiceTests
         data.DetalleGastos.ShouldHaveSingleItem();
         data.DetalleGastos[0].Valor.ShouldBe(45000m);
         data.DetalleGastos[0].Confianza.ShouldBe(0.6f); // la menor de sus celdas
-        data.CamposNoEncontrados.ShouldBe(new[] { "Destino", "Flete", "TotalGastos", "SaldoViaje" }, ignoreOrder: true);
+        data.DetalleGastos[0].Concepto.ShouldBe("PEAJES");          // etiqueta impresa reconocida
+        data.DetalleGastos[0].Descripcion.ShouldBe("Pescadero");
+        data.DetalleGastos[0].CategoriaPropuesta.ShouldBe("PEAJES");
+        data.CamposNoEncontrados.ShouldBe(new[]
+        {
+            "EmpresaTransportadora", "Destino", "FechaInicial", "FechaFinal", "Flete", "TotalGastos", "SaldoViaje",
+        }, ignoreOrder: true);
 
         // Promedio de placa, origen, anticipo y las dos celdas de la fila: (0.8+1+0.7+0.9+0.6)/5 = 0.8
         data.ConfianzaPromedio!.Value.ShouldBe(0.8f, 0.0001f);

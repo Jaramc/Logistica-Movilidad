@@ -32,14 +32,27 @@ public record PlanillaOcrDataDto(
     /// <summary>Campos esperados que no vinieron o vinieron vacíos (p. ej. "Flete"), para resaltarlos en la UI.</summary>
     List<string>? CamposNoEncontrados = null,
     /// <summary>JSON con los campos extraídos: [{ nombre, content, confidence }]. Se reenvía al guardar.</summary>
-    string? JsonOcrCrudo = null
+    string? JsonOcrCrudo = null,
+    /// <summary>Total de gastos escrito en la planilla (no el calculado).</summary>
+    decimal? TotalGastosDeclarado = null,
+    /// <summary>Saldos escritos en la planilla, con signo: positivo = la empresa le debe al conductor.</summary>
+    SaldoDeclaradoDto? SaldoViajeDeclarado = null,
+    SaldoDeclaradoDto? SaldoAnteriorDeclarado = null,
+    SaldoDeclaradoDto? SaldoNuevoDeclarado = null
 );
 
+/// <summary>Saldo escrito en la planilla: valor con signo y a favor de quién ("Conductor" o "Empresa").</summary>
+public record SaldoDeclaradoDto(decimal Valor, string? AFavorDe);
+
 /// <summary>
-/// Renglón individual extraído de la tabla de gastos de la planilla.
+/// Renglón de gasto de la planilla. Concepto = la etiqueta impresa ("PEAJES") o, en filas libres,
+/// lo escrito a mano. Descripcion = la nota escrita a mano. CategoriaPropuesta = una de las 16.
 /// </summary>
 public record GastoDetalleOcrDto(
     string Concepto,
     decimal Valor,
-    float? Confianza = null
+    float? Confianza = null,
+    string Etiqueta = "",
+    string? Descripcion = null,
+    string CategoriaPropuesta = "OTROS"
 );
