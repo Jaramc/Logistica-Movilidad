@@ -69,7 +69,7 @@ public class UsuariosController : ControllerBase
         };
         usuario.IniciarPasswordTemporal(_reloj.GetUtcNow().UtcDateTime, _seguridad.VigenciaPasswordTemporal);
 
-        var passwordTemporal = GeneradorPassword.Generar();
+        var passwordTemporal = await GeneradorPassword.GenerarValidaAsync(p => CumplePoliticaAsync(usuario, p));
         var creado = await _userManager.CreateAsync(usuario, passwordTemporal);
         if (!creado.Succeeded)
         {
@@ -81,6 +81,16 @@ public class UsuariosController : ControllerBase
 
         _logger.LogInformation("Administrador {AdminId} creó el usuario {UsuarioId} con rol {Rol}.", IdActual(), usuario.Id, dto.Rol);
         return StatusCode(StatusCodes.Status201Created, new UsuarioCreadoDto(await ADtoAsync(usuario), passwordTemporal));
+    }
+
+    /// <summary>True si la contraseña pasa todos los validadores de Identity para este usuario.</summary>
+    private async Task<bool> CumplePoliticaAsync(Usuario usuario, string password)
+    {
+        foreach (var validador in _userManager.PasswordValidators)
+        {
+            if (!(await validador.ValidateAsync(_userManager, usuario, password)).Succeeded) return false;
+        }
+        return true;
     }
 
     [HttpPut("{id:guid}/rol")]
@@ -159,7 +169,7 @@ public class UsuariosController : ControllerBase
         var usuario = await _userManager.FindByIdAsync(id.ToString());
         if (usuario is null) return NoEncontrado();
 
-        var passwordTemporal = GeneradorPassword.Generar();
+        var passwordTemporal = await GeneradorPassword.GenerarValidaAsync(p => CumplePoliticaAsync(usuario, p));
         var token = await _userManager.GeneratePasswordResetTokenAsync(usuario);
         var resultado = await _userManager.ResetPasswordAsync(usuario, token, passwordTemporal); // rota el stamp
         if (!resultado.Succeeded)

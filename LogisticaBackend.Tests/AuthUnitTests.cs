@@ -54,8 +54,16 @@ public class AuthUnitTests
         var usuario = new Usuario { Email = "ana@empresa.co", NombreCompleto = "Ana Gómez" };
         for (var i = 0; i < 500; i++)
         {
-            (await Validador.ValidateAsync(null!, usuario, GeneradorPassword.Generar())).Succeeded.ShouldBeTrue();
+            var password = await GeneradorPassword.GenerarValidaAsync(
+                async p => (await Validador.ValidateAsync(null!, usuario, p)).Succeeded);
+            (await Validador.ValidateAsync(null!, usuario, password)).Succeeded.ShouldBeTrue();
         }
+    }
+
+    [Fact]
+    public async Task GeneradorPassword_SiNingunaCumple_LanzaEnVezDeDevolverUnaInvalida()
+    {
+        await Should.ThrowAsync<InvalidOperationException>(() => GeneradorPassword.GenerarValidaAsync(_ => Task.FromResult(false)));
     }
 
     [Fact]
