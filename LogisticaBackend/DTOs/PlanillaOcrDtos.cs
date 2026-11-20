@@ -26,7 +26,13 @@ public record PlanillaOcrDataDto(
     DateOnly? FechaFinal = null,
     string? Manifiesto = null,
     string? EmpresaTransportadora = null,
-    List<string>? Advertencias = null
+    List<string>? Advertencias = null,
+    /// <summary>Promedio de Confidence (0–1) de los campos que el modelo encontró.</summary>
+    float? ConfianzaPromedio = null,
+    /// <summary>Campos esperados que no vinieron o vinieron vacíos (p. ej. "Flete"), para resaltarlos en la UI.</summary>
+    List<string>? CamposNoEncontrados = null,
+    /// <summary>JSON con los campos extraídos: [{ nombre, content, confidence }]. Se reenvía al guardar.</summary>
+    string? JsonOcrCrudo = null
 );
 
 /// <summary>
@@ -34,5 +40,6 @@ public record PlanillaOcrDataDto(
 /// </summary>
 public record GastoDetalleOcrDto(
     string Concepto,
-    decimal Valor
+    decimal Valor,
+    float? Confianza = null
 );

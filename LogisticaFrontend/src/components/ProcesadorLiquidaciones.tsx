@@ -7,6 +7,7 @@ import {
   type GuardarPlanillaDto 
 } from '../features/planillas/schemas/planillaSchema';
 import { calcularLiquidacionEconomica, toApiDecimalNumber } from '../features/planillas/utils/money';
+import { hoyLocalISO } from '../lib/fechas';
 import { usePlanillaExtraccion } from '../features/planillas/hooks/usePlanillaExtraccion';
 import { useGuardarPlanilla } from '../features/planillas/hooks/useGuardarPlanilla';
 import { UploadDropzone } from '../features/planillas/components/UploadDropzone';
@@ -20,13 +21,16 @@ import { Sparkles, CheckCircle2, RotateCcw } from 'lucide-react';
 
 export type EstadoFlujo = 'idle' | 'archivoSeleccionado' | 'extrayendo' | 'revisando' | 'guardado';
 
-const FECHA_HOY = new Date().toISOString().split('T')[0] ?? '';
 const ARRAY_VACIO_GASTOS: any[] = [];
 
 export default function ProcesadorLiquidaciones() {
   const [estado, setEstado] = useState<EstadoFlujo>('idle');
   const [archivo, setArchivo] = useState<File | null>(null);
   const [tabActiva, setTabActiva] = useState<'gastos' | 'viaje'>('gastos');
+  // Lo que devolvió el OCR y no va en el formulario: se reenvía (jsonOcrCrudo) o se muestra al revisor.
+  const [jsonOcrCrudo, setJsonOcrCrudo] = useState<string | null>(null);
+  const [camposNoEncontrados, setCamposNoEncontrados] = useState<string[]>([]);
+  const [confianzaPromedio, setConfianzaPromedio] = useState<number | null>(null);
 
   const reviewHeadingRef = useRef<HTMLHeadingElement>(null);
 
@@ -38,8 +42,8 @@ export default function ProcesadorLiquidaciones() {
       conductor: '',
       origen: '',
       destino: '',
-      fechaInicial: FECHA_HOY,
-      fechaFinal: FECHA_HOY,
+      fechaInicial: hoyLocalISO(),
+      fechaFinal: hoyLocalISO(),
       manifiesto: '',
       empresaTransportadora: '',
       flete: 0,
@@ -89,12 +93,17 @@ export default function ProcesadorLiquidaciones() {
     setEstado('extrayendo');
     resetOcr();
     resetGuardar();
+    limpiarDatosOcr();
 
     try {
       const respuesta = await extraer(file);
       const data = respuesta.data;
 
       if (data) {
+        setJsonOcrCrudo(data.jsonOcrCrudo);
+        setCamposNoEncontrados(data.camposNoEncontrados);
+        setConfianzaPromedio(data.confianzaPromedio);
+
         resetForm({
           placa: data.placa || '',
           conductor: form.getValues('conductor') || '',
@@ -139,6 +148,7 @@ export default function ProcesadorLiquidaciones() {
         concepto: g.concepto,
         valor: toApiDecimalNumber(g.valor),
       })),
+      jsonOcrCrudo,
     };
 
     try {
@@ -149,7 +159,14 @@ export default function ProcesadorLiquidaciones() {
     }
   };
 
+  const limpiarDatosOcr = () => {
+    setJsonOcrCrudo(null);
+    setCamposNoEncontrados([]);
+    setConfianzaPromedio(null);
+  };
+
   const reiniciarProceso = () => {
+    limpiarDatosOcr();
     setArchivo(null);
     setEstado('idle');
     resetForm();
@@ -261,6 +278,21 @@ export default function ProcesadorLiquidaciones() {
 
           {/* Panel Derecho: Formulario Estructurado (7 Cols) */}
           <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200 shadow-2xs flex flex-col overflow-hidden">
+            {(confianzaPromedio !== null || camposNoEncontrados.length > 0) && (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2 text-xs border-b border-slate-200 bg-white">
+                {confianzaPromedio !== null && (
+                  <span className="font-semibold text-slate-600" data-testid="confianza-ocr">
+                    Confianza OCR: {Math.round(confianzaPromedio * 100)}%
+                  </span>
+                )}
+                {camposNoEncontrados.length > 0 && (
+                  <span className="text-amber-700">
+                    No encontrados: {camposNoEncontrados.join(', ')}. Revísalos antes de aprobar.
+                  </span>
+                )}
+              </div>
+            )}
+
             {/* Pestañas de Edición */}
             <div className="flex border-b border-slate-200 bg-slate-50/50 px-4 pt-2 gap-2">
               <button
@@ -289,7 +321,7 @@ export default function ProcesadorLiquidaciones() {
 
             <div className="p-5 sm:p-6 flex-1 overflow-y-auto">
               {tabActiva === 'gastos' && <GastosTable control={form.control} />}
-              {tabActiva === 'viaje' && <DatosViajeForm form={form} />}
+              {tabActiva === 'viaje' && <DatosViajeForm form={form} camposNoEncontrados={camposNoEncontrados} />}
             </div>
 
             {/* Footer de Acciones y Guardado Seguro */}

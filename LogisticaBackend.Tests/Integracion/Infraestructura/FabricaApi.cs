@@ -65,6 +65,13 @@ public sealed class OcrFalso : IPlanillaOcrService
     {
         if (ExcepcionAForzar is not null) throw ExcepcionAForzar;
         return Task.FromResult(new PlanillaOcrResponseDto("Procesado",
-            new PlanillaOcrDataDto("WCN410", "BOGOTA", "MEDELLIN", 0m, 0m, 0m, 0m, new List<GastoDetalleOcrDto>())));
+            new PlanillaOcrDataDto("WCN410", "BOGOTA", "MEDELLIN", 0m, 2_800_000m, 0m, 0m,
+                new List<GastoDetalleOcrDto> { new("Peaje Pescadero", 45_000m, 0.9f), new("ACPM", 1_158_300m, 0.8f) },
+                ConfianzaPromedio: 0.85f,
+                CamposNoEncontrados: new List<string> { "Flete" },
+                JsonOcrCrudo: JsonOcrCrudoFalso)));
     }
+
+    public const string JsonOcrCrudoFalso =
+        """[{"nombre":"Placa","content":"WCN410","confidence":0.9},{"nombre":"Anticipo","content":"$ 2.800.000","confidence":0.8}]""";
 }

@@ -125,6 +125,12 @@ public class PlanillasController : ControllerBase
 
         var ahora = _reloj.GetUtcNow().UtcDateTime;
 
+        var (jsonOcr, resultadoJson) = JsonOcrCrudo.Sanear(dto.JsonOcrCrudo);
+        if (resultadoJson is JsonOcrCrudo.Resultado.DemasiadoGrande or JsonOcrCrudo.Resultado.Invalido)
+        {
+            _logger.LogWarning("jsonOcrCrudo descartado ({Motivo}); se guarda null. Usuario {UsuarioId}.", resultadoJson, usuarioId);
+        }
+
         // Mapeo explícito: solo se copian los campos permitidos (anti-overposting).
         var entidad = new PlanillaViaje
         {
@@ -143,6 +149,7 @@ public class PlanillasController : ControllerBase
             SaldoViaje = calculo.SaldoViaje,
             SaldoTotal = calculo.SaldoTotal,
             EstadoRevision = EstadoRevision.Aprobado,
+            JsonOcrCrudo = jsonOcr,
             CreadoPorUsuarioId = usuarioId,
             RevisadoPorUsuarioId = usuarioId,
             CreadoEn = ahora,

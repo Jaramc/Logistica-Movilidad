@@ -57,10 +57,62 @@ describe('planillasApi.ts - Rutas Canónicas del Backend', () => {
       expect(resultado.data?.placa).toBe('WCN410');
       expect(resultado.data?.flete).toBe(4500000);
       expect(resultado.data?.detalleGastos).toHaveLength(1);
+      // Sin los campos nuevos (backend anterior): valores neutros, no rompe.
+      expect(resultado.data?.camposNoEncontrados).toEqual([]);
+      expect(resultado.data?.confianzaPromedio).toBeNull();
+      expect(resultado.data?.jsonOcrCrudo).toBeNull();
+    });
+
+    it('expone confianzaPromedio, camposNoEncontrados y jsonOcrCrudo del OCR', async () => {
+      const jsonOcrCrudo = '[{"nombre":"Placa","content":"WCN410","confidence":0.9}]';
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({
+          mensaje: 'ok',
+          data: {
+            placa: 'WCN410', origen: 'BOGOTA', destino: null, flete: 0, anticipo: 0,
+            totalGastos: 0, saldoViaje: 0, detalleGastos: [],
+            confianzaPromedio: 0.87, camposNoEncontrados: ['Destino', 'Flete'], jsonOcrCrudo,
+          },
+        }),
+      });
+
+      const resultado = await extraerPlanillaOcrApi(new File(['%PDF-1.4'], 'p.pdf', { type: 'application/pdf' }));
+
+      expect(resultado.data?.confianzaPromedio).toBe(0.87);
+      expect(resultado.data?.camposNoEncontrados).toEqual(['Destino', 'Flete']);
+      expect(resultado.data?.jsonOcrCrudo).toBe(jsonOcrCrudo);
     });
   });
 
   describe('guardarPlanillaApi', () => {
+    it('envía el jsonOcrCrudo tal como lo devolvió el OCR', async () => {
+      let capturedBody = '';
+      globalThis.fetch = vi.fn().mockImplementation(async (_url: string, init: any) => {
+        capturedBody = init.body;
+        return {
+          ok: true,
+          status: 201,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({ mensaje: 'ok', id: 7 }),
+        };
+      });
+      const jsonOcrCrudo = '[{"nombre":"Flete","content":"$ 6.976.800","confidence":0.71}]';
+
+      await guardarPlanillaApi({
+        placa: 'WCN410', conductor: 'ANA', origen: 'BOGOTA', destino: 'CALI',
+        fechaInicial: '2026-11-01', fechaFinal: '2026-11-02', flete: 6976800, anticipo: 0,
+        gastos: [{ concepto: 'PEAJES', valor: 45000 }],
+        jsonOcrCrudo,
+      });
+
+      const enviado = JSON.parse(capturedBody);
+      expect(enviado.jsonOcrCrudo).toBe(jsonOcrCrudo);
+      expect(enviado.gastos).toEqual([{ concepto: 'PEAJES', valor: 45000 }]);
+    });
+
     it('llama a POST /api/planillas con el DTO canónico', async () => {
       let capturedUrl = '';
       let capturedMethod = '';

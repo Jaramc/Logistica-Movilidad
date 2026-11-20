@@ -5,6 +5,8 @@ namespace LogisticaBackend.DTOs;
 /// No incluye Id, EstadoRevision, CreadoEn, autoría, totales ni SaldoAnterior: el servidor los
 /// asigna o calcula. SaldoAnterior sale del SaldoTotal de la última planilla del mismo conductor.
 /// Cualquier campo extra en el JSON (id, totalGastos, saldoAnterior, ...) se ignora.
+/// JsonOcrCrudo es la copia de auditoría que devolvió /extraer; el servidor la valida (tamaño y
+/// JSON) y si no cumple la guarda como null.
 /// </summary>
 public record GuardarPlanillaDto(
     string Placa,
@@ -17,7 +19,8 @@ public record GuardarPlanillaDto(
     string? EmpresaTransportadora,
     decimal Flete,
     decimal Anticipo,
-    List<GastoItemDto> Gastos
+    List<GastoItemDto> Gastos,
+    string? JsonOcrCrudo = null
 );
 
 /// <summary>Renglón de gasto enviado por el formulario.</summary>

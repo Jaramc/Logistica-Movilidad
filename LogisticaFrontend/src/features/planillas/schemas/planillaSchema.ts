@@ -33,6 +33,12 @@ export const PlanillaOcrResponseSchema = z.object({
         valor: z.union([z.number(), z.string()]).nullish().transform(val => toApiDecimalNumber(val ?? 0)),
       })
     ).nullish().transform(val => val ?? []),
+    /** Promedio de confianza (0–1) de los campos leídos por el modelo. */
+    confianzaPromedio: z.number().min(0).max(1).nullish().transform(val => val ?? null),
+    /** Campos del modelo que no vinieron (p. ej. "Flete"); la UI los resalta. */
+    camposNoEncontrados: z.array(z.string()).nullish().transform(val => val ?? []),
+    /** Copia de auditoría de los campos leídos; se reenvía tal cual al guardar. */
+    jsonOcrCrudo: z.string().nullish().transform(val => val ?? null),
   }).nullish(),
 });
 
@@ -89,6 +95,8 @@ export const GuardarPlanillaDtoSchema = z.object({
       valor: z.number(),
     })
   ),
+  /** El jsonOcrCrudo que devolvió /extraer. El servidor lo valida (≤ 256 KB, JSON) o guarda null. */
+  jsonOcrCrudo: z.string().nullable().optional(),
 });
 
 export type GuardarPlanillaDto = z.infer<typeof GuardarPlanillaDtoSchema>;

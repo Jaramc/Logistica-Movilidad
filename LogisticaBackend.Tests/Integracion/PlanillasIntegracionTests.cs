@@ -204,6 +204,89 @@ public class PlanillasIntegracionTests
             .ShouldBe(10 * 1024 * 1024 + 64 * 1024);
     }
 
+    private Task<string?> JsonOcrGuardadoAsync(int id) => Sembrador.EnScopeAsync(_fabrica, sp =>
+        sp.GetRequiredService<AppDbContext>().Planillas.AsNoTracking()
+            .Where(p => p.Id == id).Select(p => p.JsonOcrCrudo).SingleAsync());
+
+    /// <summary>Extraer → guardar con el jsonOcrCrudo que devolvió el OCR → queda en la columna jsonb.</summary>
+    [Fact]
+    public async Task ExtraerYGuardar_PersisteElJsonOcrCrudoDevueltoPorElOcr()
+    {
+        var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
+        using (cliente)
+        {
+            var png = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0 };
+            var ocr = await SubirAsync(cliente, Archivo(png, "planilla.png", "image/png"));
+            ocr.StatusCode.ShouldBe(HttpStatusCode.OK, await ocr.Content.ReadAsStringAsync());
+            var datos = (await ocr.JsonAsync()).GetProperty("data");
+            datos.GetProperty("camposNoEncontrados").EnumerateArray().Select(e => e.GetString()).ShouldBe(new[] { "Flete" });
+            datos.GetProperty("confianzaPromedio").GetSingle().ShouldBe(0.85f);
+            var jsonOcr = datos.GetProperty("jsonOcrCrudo").GetString();
+
+            var conductor = "CONDUCTOR " + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+            var r = await cliente.PostAsync("/api/planillas", new
+            {
+                placa = datos.GetProperty("placa").GetString(), conductor,
+                origen = datos.GetProperty("origen").GetString(), destino = datos.GetProperty("destino").GetString(),
+                fechaInicial = "2026-11-01", fechaFinal = "2026-11-05",
+                flete = 6_976_800m, anticipo = datos.GetProperty("anticipo").GetDecimal(),
+                gastos = datos.GetProperty("detalleGastos").EnumerateArray()
+                    .Select(g => new { concepto = g.GetProperty("concepto").GetString(), valor = g.GetProperty("valor").GetDecimal() }),
+                jsonOcrCrudo = jsonOcr,
+            });
+            r.StatusCode.ShouldBe(HttpStatusCode.Created, await r.Content.ReadAsStringAsync());
+            var id = (await r.JsonAsync()).GetProperty("id").GetInt32();
+
+            var guardado = await JsonOcrGuardadoAsync(id);
+            using var real = System.Text.Json.JsonDocument.Parse(guardado!);
+            // jsonb reordena claves y espacios: se compara campo a campo.
+            real.RootElement.GetArrayLength().ShouldBe(2);
+            real.RootElement[0].GetProperty("nombre").GetString().ShouldBe("Placa");
+            real.RootElement[1].GetProperty("content").GetString().ShouldBe("$ 2.800.000");
+            real.RootElement[1].GetProperty("confidence").GetDecimal().ShouldBe(0.8m);
+        }
+    }
+
+    [Fact]
+    public async Task Guardar_ConJsonOcrCrudoInvalidoOGrande_GuardaNullSinRechazar()
+    {
+        var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
+        using (cliente)
+        {
+            foreach (var jsonMalo in new[] { "{no es json", "[" + new string(' ', LogisticaBackend.Domain.Services.JsonOcrCrudo.TamanoMaximoBytes) + "]" })
+            {
+                var conductor = "CONDUCTOR " + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+                var r = await cliente.PostAsync("/api/planillas", new
+                {
+                    placa = "WCN410", conductor, origen = "BOGOTA", destino = "MEDELLIN",
+                    fechaInicial = "2026-11-01", fechaFinal = "2026-11-05", flete = 1_000m, anticipo = 0m,
+                    gastos = new[] { new { concepto = "PEAJES", valor = 100m } },
+                    jsonOcrCrudo = jsonMalo,
+                });
+                r.StatusCode.ShouldBe(HttpStatusCode.Created, await r.Content.ReadAsStringAsync());
+                (await JsonOcrGuardadoAsync((await r.JsonAsync()).GetProperty("id").GetInt32())).ShouldBeNull();
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Guardar_ConJsonOcrCrudoSinTokenCsrf_EsRechazado()
+    {
+        var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
+        using (cliente)
+        {
+            var r = await cliente.PostAsync("/api/planillas", new
+            {
+                placa = "WCN410", conductor = "SIN CSRF", origen = "BOGOTA", destino = "MEDELLIN",
+                fechaInicial = "2026-11-01", fechaFinal = "2026-11-05", flete = 1_000m, anticipo = 0m,
+                gastos = new[] { new { concepto = "PEAJES", valor = 100m } },
+                jsonOcrCrudo = OcrFalso.JsonOcrCrudoFalso,
+            }, conCsrf: false);
+            r.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+            (await r.JsonAsync()).GetProperty("title").GetString().ShouldBe("Solicitud rechazada");
+        }
+    }
+
     [Fact]
     public async Task Auditoria_EsDeSoloInsercionEnLaBaseDeDatos()
     {

@@ -7,10 +7,21 @@ import { Truck, Calendar, User, MapPin } from 'lucide-react';
 
 export interface DatosViajeFormProps {
   form: UseFormReturn<PlanillaFormData>;
+  /** Nombres de campo del modelo OCR ("Placa", "Flete", …) que no se encontraron en la planilla. */
+  camposNoEncontrados?: readonly string[];
 }
 
-export const DatosViajeForm: React.FC<DatosViajeFormProps> = ({ form }) => {
+const CLASE_NO_ENCONTRADO = 'border-amber-400 bg-amber-50 hover:border-amber-500';
+const AYUDA_NO_ENCONTRADO = 'El OCR no encontró este dato: complétalo a mano.';
+
+export const DatosViajeForm: React.FC<DatosViajeFormProps> = ({ form, camposNoEncontrados = [] }) => {
   const { register, formState: { errors }, control } = form;
+
+  /** Props de resaltado en ámbar para un campo que el OCR no encontró (el error de validación tiene prioridad). */
+  const resaltar = (campoOcr: string, tieneError: boolean) =>
+    !tieneError && camposNoEncontrados.includes(campoOcr)
+      ? { className: CLASE_NO_ENCONTRADO, helperText: AYUDA_NO_ENCONTRADO, 'data-ocr-no-encontrado': true }
+      : {};
 
   return (
     <div className="space-y-6">
@@ -28,6 +39,7 @@ export const DatosViajeForm: React.FC<DatosViajeFormProps> = ({ form }) => {
             placeholder="Ej. S14 o WCN452"
             error={errors.placa?.message}
             leftAddon={<Truck className="w-4 h-4" />}
+            {...resaltar('Placa', !!errors.placa)}
             {...register('placa', {
               onChange: (e) => {
                 form.setValue('placa', e.target.value.toUpperCase());
@@ -50,6 +62,7 @@ export const DatosViajeForm: React.FC<DatosViajeFormProps> = ({ form }) => {
             placeholder="Ej. Buenaventura"
             error={errors.origen?.message}
             leftAddon={<MapPin className="w-4 h-4" />}
+            {...resaltar('Origen', !!errors.origen)}
             {...register('origen')}
           />
 
@@ -59,6 +72,7 @@ export const DatosViajeForm: React.FC<DatosViajeFormProps> = ({ form }) => {
             placeholder="Ej. Medellín"
             error={errors.destino?.message}
             leftAddon={<MapPin className="w-4 h-4" />}
+            {...resaltar('Destino', !!errors.destino)}
             {...register('destino')}
           />
 
@@ -113,6 +127,7 @@ export const DatosViajeForm: React.FC<DatosViajeFormProps> = ({ form }) => {
                 onChange={field.onChange}
                 error={errors.flete?.message}
                 helperText="Monto total acordado por el viaje"
+                {...resaltar('Flete', !!errors.flete)}
               />
             )}
           />
@@ -127,6 +142,7 @@ export const DatosViajeForm: React.FC<DatosViajeFormProps> = ({ form }) => {
                 onChange={field.onChange}
                 error={errors.anticipo?.message}
                 helperText="Dinero recibido para gastos en ruta"
+                {...resaltar('Anticipo', !!errors.anticipo)}
               />
             )}
           />

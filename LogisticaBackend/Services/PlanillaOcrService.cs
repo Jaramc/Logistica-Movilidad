@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Azure;
 using Azure.AI.FormRecognizer.DocumentAnalysis;
 using Microsoft.Extensions.Options;
@@ -14,6 +15,14 @@ namespace LogisticaBackend.Services;
 /// </summary>
 public class PlanillaOcrService : IPlanillaOcrService
 {
+    /// <summary>Campos del modelo custom que la UI espera. Los que falten se reportan en CamposNoEncontrados.</summary>
+    public static readonly IReadOnlyList<string> CamposEsperados = new[]
+    {
+        "Placa", "Origen", "Destino", "Flete", "Anticipo", "TotalGastos", "SaldoViaje", "DetalleGastos"
+    };
+
+    private static readonly JsonSerializerOptions OpcionesJson = new(JsonSerializerDefaults.Web);
+
     private readonly DocumentAnalysisClient _client;
     private readonly AzureOcrOptions _options;
     private readonly ILogger<PlanillaOcrService> _logger;
@@ -27,6 +36,9 @@ public class PlanillaOcrService : IPlanillaOcrService
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
+
+    /// <summary>Un campo tal como lo leyó Azure: lo que se guarda en jsonOcrCrudo.</summary>
+    private sealed record CampoLeido(string Nombre, string? Content, float? Confidence);
 
     public async Task<PlanillaOcrResponseDto> ProcesarPlanillaAsync(Stream stream, CancellationToken cancellationToken = default)
     {
@@ -73,32 +85,37 @@ public class PlanillaOcrService : IPlanillaOcrService
                     TotalGastos: 0m,
                     SaldoViaje: 0m,
                     DetalleGastos: new List<GastoDetalleOcrDto>(),
-                    Advertencias: advertencias
+                    Advertencias: advertencias,
+                    ConfianzaPromedio: null,
+                    CamposNoEncontrados: CamposEsperados.ToList(),
+                    JsonOcrCrudo: "[]"
                 )
             );
         }
 
         var document = analyzeResult.Documents[0];
         var fields = document.Fields ?? new Dictionary<string, DocumentField>();
+        var leidos = new List<CampoLeido>();
+        var noEncontrados = new List<string>();
 
-        // 1. Extracción tolerante a nulos de campos dedicados principales
-        var placa = ExtraerTextoSeguro(fields, "Placa")?.ToUpperInvariant();
-        var origen = ExtraerTextoSeguro(fields, "Origen");
-        var destino = ExtraerTextoSeguro(fields, "Destino");
-        var fleteDedicado = ExtraerNumeroSeguro(fields, "Flete");
-        var anticipoDedicado = ExtraerNumeroSeguro(fields, "Anticipo");
-        var totalGastosAzure = ExtraerNumeroSeguro(fields, "TotalGastos");
-        var saldoViajeAzure = ExtraerNumeroSeguro(fields, "SaldoViaje");
+        // 1. Campos de cabecera
+        var placa = ExtraerTexto(fields, "Placa", leidos, noEncontrados)?.ToUpperInvariant();
+        var origen = ExtraerTexto(fields, "Origen", leidos, noEncontrados);
+        var destino = ExtraerTexto(fields, "Destino", leidos, noEncontrados);
+        var fleteDedicado = ExtraerNumero(fields, "Flete", leidos, noEncontrados);
+        var anticipoDedicado = ExtraerNumero(fields, "Anticipo", leidos, noEncontrados);
+        var totalGastosAzure = ExtraerNumero(fields, "TotalGastos", leidos, noEncontrados);
+        var saldoViajeAzure = ExtraerNumero(fields, "SaldoViaje", leidos, noEncontrados);
 
-        // Campos de cabecera opcionales
-        var conductor = ExtraerTextoSeguro(fields, "Conductor");
-        var manifiesto = ExtraerTextoSeguro(fields, "Manifiesto");
-        var empresa = ExtraerTextoSeguro(fields, "EmpresaTransportadora") ?? ExtraerTextoSeguro(fields, "Empresa");
-        var fechaInicial = ExtraerFechaSegura(fields, "FechaInicial");
-        var fechaFinal = ExtraerFechaSegura(fields, "FechaFinal");
+        // Campos opcionales: no se reportan como faltantes (no son parte del modelo custom).
+        var conductor = ExtraerTexto(fields, "Conductor", leidos, null);
+        var manifiesto = ExtraerTexto(fields, "Manifiesto", leidos, null);
+        var empresa = ExtraerTexto(fields, "EmpresaTransportadora", leidos, null) ?? ExtraerTexto(fields, "Empresa", leidos, null);
+        var fechaInicial = ExtraerFecha(fields, "FechaInicial", leidos);
+        var fechaFinal = ExtraerFecha(fields, "FechaFinal", leidos);
 
-        // 2. Extracción de la tabla de gastos con filtrado inteligente de Flete y Anticipo
-        var gastosExtraidos = ExtraerTablaGastos(document);
+        // 2. Tabla de gastos, con filtrado de los renglones FLETE y ANTICIPO
+        var gastosExtraidos = ExtraerTablaGastos(document, leidos, noEncontrados);
         var gastosFinales = new List<GastoDetalleOcrDto>();
 
         decimal fleteFinal = fleteDedicado;
@@ -108,12 +125,12 @@ public class PlanillaOcrService : IPlanillaOcrService
         {
             var conceptoNorm = item.Concepto.Trim().ToUpperInvariant();
 
-            // Filtrado de fila FLETE dentro de la tabla de gastos
             if (conceptoNorm == "FLETE" || conceptoNorm.StartsWith("FLETE "))
             {
                 if (fleteFinal == 0m && item.Valor > 0m)
                 {
                     fleteFinal = item.Valor;
+                    noEncontrados.Remove("Flete");
                 }
                 else if (fleteFinal > 0m && item.Valor > 0m && fleteFinal != item.Valor)
                 {
@@ -123,18 +140,17 @@ public class PlanillaOcrService : IPlanillaOcrService
                 continue;
             }
 
-            // Filtrado de fila ANTICIPO dentro de la tabla de gastos
             if (conceptoNorm == "ANTICIPO" || conceptoNorm.StartsWith("ANTICIPO "))
             {
                 if (anticipoFinal == 0m && item.Valor > 0m)
                 {
                     anticipoFinal = item.Valor;
+                    noEncontrados.Remove("Anticipo");
                 }
                 else if (anticipoFinal > 0m && item.Valor > 0m && anticipoFinal != item.Valor)
                 {
                     advertencias.Add($"El anticipo en cabecera (${anticipoFinal:N0}) difiere del anticipo en la tabla (${item.Valor:N0}). Se conserva el valor de cabecera.");
                 }
-                // Se descarta de la lista de gastos para evitar doble conteo
                 continue;
             }
 
@@ -151,7 +167,6 @@ public class PlanillaOcrService : IPlanillaOcrService
         var totalGastosCalculado = calculoContable.TotalGastos;
         var saldoViajeCalculado = calculoContable.SaldoViaje;
 
-        // Comprobación de advertencias contra los valores leídos por Azure
         if (totalGastosAzure > 0m && Math.Abs(totalGastosAzure - totalGastosCalculado) > 0.01m)
         {
             advertencias.Add($"El Total Gastos impreso en el comprobante (${totalGastosAzure:N0}) difiere de la suma de rubros identificados (${totalGastosCalculado:N0}).");
@@ -161,6 +176,9 @@ public class PlanillaOcrService : IPlanillaOcrService
         {
             advertencias.Add($"El Saldo Viaje impreso en el comprobante (${saldoViajeAzure:N0}) difiere del balance calculado (${saldoViajeCalculado:N0}).");
         }
+
+        var confianzas = leidos.Where(c => c.Confidence.HasValue).Select(c => c.Confidence!.Value).ToList();
+        float? confianzaPromedio = confianzas.Count > 0 ? (float)Math.Round(confianzas.Average(), 4) : null;
 
         var dataDto = new PlanillaOcrDataDto(
             Placa: placa,
@@ -176,73 +194,98 @@ public class PlanillaOcrService : IPlanillaOcrService
             FechaFinal: fechaFinal,
             Manifiesto: manifiesto,
             EmpresaTransportadora: empresa,
-            Advertencias: advertencias.Count > 0 ? advertencias : null
+            Advertencias: advertencias.Count > 0 ? advertencias : null,
+            ConfianzaPromedio: confianzaPromedio,
+            CamposNoEncontrados: noEncontrados,
+            JsonOcrCrudo: JsonSerializer.Serialize(leidos, OpcionesJson)
         );
 
         return new PlanillaOcrResponseDto("Planilla procesada exitosamente.", dataDto);
     }
 
-    #region Métodos de Extracción Tolerantes a Nulos
+    #region Extracción de campos
 
-    private static DocumentField? BuscarCampoCaseInsensitive(IReadOnlyDictionary<string, DocumentField> fields, string nombreCampo)
+    private static DocumentField? BuscarCampo(IReadOnlyDictionary<string, DocumentField>? fields, string nombreCampo)
     {
         if (fields == null) return null;
         var key = fields.Keys.FirstOrDefault(k => string.Equals(k, nombreCampo, StringComparison.OrdinalIgnoreCase));
         return key != null && fields.TryGetValue(key, out var field) ? field : null;
     }
 
-    private static string? ExtraerTextoSeguro(IReadOnlyDictionary<string, DocumentField> fields, string nombreCampo)
+    /// <summary>Errores esperables al leer un DocumentField: tipo distinto al pedido o valor fuera de rango.</summary>
+    private static bool EsErrorDeLectura(Exception ex) =>
+        ex is InvalidOperationException or FormatException or OverflowException or ArgumentException;
+
+    private string? LeerTexto(DocumentField field, string nombreCampo)
     {
         try
         {
-            var field = BuscarCampoCaseInsensitive(fields, nombreCampo);
-            if (field == null) return null;
-
             if (!string.IsNullOrWhiteSpace(field.Content))
                 return field.Content.Trim();
 
-            if (field.FieldType == DocumentFieldType.String)
-                return field.Value?.AsString()?.Trim();
-
-            return null;
+            return field.FieldType == DocumentFieldType.String ? field.Value?.AsString()?.Trim() : null;
         }
-        catch
+        catch (Exception ex) when (EsErrorDeLectura(ex))
         {
+            _logger.LogWarning(ex, "No se pudo leer el campo OCR {Campo} como texto; se aplica el valor por defecto {ValorPorDefecto}.", nombreCampo, "null");
             return null;
         }
     }
 
-    private static decimal ExtraerNumeroSeguro(IReadOnlyDictionary<string, DocumentField> fields, string nombreCampo)
+    /// <summary>Valor tipado (Currency/Double/Int64) convertido a decimal; el texto solo se parsea si el tipo es String o desconocido.</summary>
+    private decimal LeerNumero(DocumentField field, string nombreCampo)
     {
         try
         {
-            var field = BuscarCampoCaseInsensitive(fields, nombreCampo);
-            if (field == null) return 0m;
-
-            if (field.FieldType == DocumentFieldType.Double)
-                return CalculadoraLiquidacion.Redondear((decimal)field.Value.AsDouble());
-
-            if (field.FieldType == DocumentFieldType.Int64)
-                return (decimal)field.Value.AsInt64();
-
-            if (field.FieldType == DocumentFieldType.Currency)
-                return CalculadoraLiquidacion.Redondear((decimal)field.Value.AsCurrency().Amount);
-
-            return CalculadoraLiquidacion.ParsearMonedaColombiana(field.Content);
+            var valor = field.FieldType switch
+            {
+                DocumentFieldType.Currency => (decimal)field.Value.AsCurrency().Amount,
+                DocumentFieldType.Double => (decimal)field.Value.AsDouble(),
+                DocumentFieldType.Int64 => field.Value.AsInt64(),
+                _ => MontoParser.ParseCop(field.Content)
+            };
+            return CalculadoraLiquidacion.Redondear(valor);
         }
-        catch
+        catch (Exception ex) when (EsErrorDeLectura(ex))
         {
+            _logger.LogWarning(ex, "No se pudo leer el campo OCR {Campo} como monto; se aplica el valor por defecto {ValorPorDefecto}.", nombreCampo, 0m);
             return 0m;
         }
     }
 
-    private static DateOnly? ExtraerFechaSegura(IReadOnlyDictionary<string, DocumentField> fields, string nombreCampo)
+    private string? ExtraerTexto(IReadOnlyDictionary<string, DocumentField> fields, string nombreCampo,
+        List<CampoLeido> leidos, List<string>? noEncontrados)
     {
+        var field = BuscarCampo(fields, nombreCampo);
+        var texto = field is null ? null : LeerTexto(field, nombreCampo);
+        if (field is not null) leidos.Add(new CampoLeido(nombreCampo, field.Content, field.Confidence));
+        if (string.IsNullOrWhiteSpace(texto)) noEncontrados?.Add(nombreCampo);
+        return string.IsNullOrWhiteSpace(texto) ? null : texto;
+    }
+
+    private decimal ExtraerNumero(IReadOnlyDictionary<string, DocumentField> fields, string nombreCampo,
+        List<CampoLeido> leidos, List<string> noEncontrados)
+    {
+        var field = BuscarCampo(fields, nombreCampo);
+        if (field is null || (string.IsNullOrWhiteSpace(field.Content) && field.Value is null))
+        {
+            if (field is not null) leidos.Add(new CampoLeido(nombreCampo, field.Content, field.Confidence));
+            noEncontrados.Add(nombreCampo);
+            return 0m;
+        }
+
+        leidos.Add(new CampoLeido(nombreCampo, field.Content, field.Confidence));
+        return LeerNumero(field, nombreCampo);
+    }
+
+    private DateOnly? ExtraerFecha(IReadOnlyDictionary<string, DocumentField> fields, string nombreCampo, List<CampoLeido> leidos)
+    {
+        var field = BuscarCampo(fields, nombreCampo);
+        if (field is null) return null;
+        leidos.Add(new CampoLeido(nombreCampo, field.Content, field.Confidence));
+
         try
         {
-            var field = BuscarCampoCaseInsensitive(fields, nombreCampo);
-            if (field == null) return null;
-
             if (field.FieldType == DocumentFieldType.Date)
             {
                 var dt = field.Value.AsDate();
@@ -256,81 +299,74 @@ public class PlanillaOcrService : IPlanillaOcrService
 
             return null;
         }
-        catch
+        catch (Exception ex) when (EsErrorDeLectura(ex))
         {
+            _logger.LogWarning(ex, "No se pudo leer el campo OCR {Campo} como fecha; se aplica el valor por defecto {ValorPorDefecto}.", nombreCampo, "null");
             return null;
         }
     }
 
-    private List<GastoDetalleOcrDto> ExtraerTablaGastos(AnalyzedDocument document)
+    private List<GastoDetalleOcrDto> ExtraerTablaGastos(AnalyzedDocument document, List<CampoLeido> leidos, List<string> noEncontrados)
     {
         var lista = new List<GastoDetalleOcrDto>();
-        if (document?.Fields == null) return lista;
 
+        var tablaField = BuscarCampo(document?.Fields, "DetalleGastos") ?? BuscarCampo(document?.Fields, "Gastos");
+        if (tablaField == null || tablaField.FieldType != DocumentFieldType.List)
+        {
+            noEncontrados.Add("DetalleGastos");
+            return lista;
+        }
+
+        IReadOnlyList<DocumentField>? filas;
         try
         {
-            var tablaField = BuscarCampoCaseInsensitive(document.Fields, "DetalleGastos") ?? BuscarCampoCaseInsensitive(document.Fields, "Gastos");
-            if (tablaField == null || tablaField.FieldType != DocumentFieldType.List)
-                return lista;
-
-            var filas = tablaField.Value?.AsList();
-            if (filas == null) return lista;
-
-            foreach (var filaField in filas)
-            {
-                if (filaField == null || filaField.FieldType != DocumentFieldType.Dictionary)
-                    continue;
-
-                try
-                {
-                    var columnas = filaField.Value?.AsDictionary();
-                    if (columnas == null) continue;
-
-                    var conceptoField = BuscarCampoCaseInsensitive(columnas, "Concepto");
-                    var valorField = BuscarCampoCaseInsensitive(columnas, "Valor");
-
-                    string concepto = string.Empty;
-                    if (conceptoField != null)
-                    {
-                        if (!string.IsNullOrWhiteSpace(conceptoField.Content))
-                            concepto = conceptoField.Content.Trim();
-                        else if (conceptoField.FieldType == DocumentFieldType.String)
-                            concepto = conceptoField.Value?.AsString()?.Trim() ?? string.Empty;
-                    }
-
-                    decimal valor = 0m;
-                    if (valorField != null)
-                    {
-                        if (valorField.FieldType == DocumentFieldType.Double)
-                            valor = (decimal)valorField.Value.AsDouble();
-                        else if (valorField.FieldType == DocumentFieldType.Int64)
-                            valor = (decimal)valorField.Value.AsInt64();
-                        else if (valorField.FieldType == DocumentFieldType.Currency)
-                            valor = (decimal)valorField.Value.AsCurrency().Amount;
-                        else
-                            valor = CalculadoraLiquidacion.ParsearMonedaColombiana(valorField.Content);
-                    }
-
-                    valor = CalculadoraLiquidacion.Redondear(valor);
-
-                    // Descarta filas completamente vacías
-                    if (!string.IsNullOrWhiteSpace(concepto) || valor > 0m)
-                    {
-                        lista.Add(new GastoDetalleOcrDto(
-                            Concepto: string.IsNullOrWhiteSpace(concepto) ? "Gasto no identificado" : concepto,
-                            Valor: valor
-                        ));
-                    }
-                }
-                catch (Exception exFila)
-                {
-                    _logger.LogWarning(exFila, "Error al procesar fila individual de gastos en OCR.");
-                }
-            }
+            filas = tablaField.Value?.AsList();
         }
-        catch (Exception exTabla)
+        catch (Exception ex) when (EsErrorDeLectura(ex))
         {
-            _logger.LogError(exTabla, "Error al extraer la tabla DetalleGastos con Azure.");
+            _logger.LogWarning(ex, "No se pudo leer el campo OCR {Campo} como lista; se aplica el valor por defecto {ValorPorDefecto}.", "DetalleGastos", "[]");
+            filas = null;
+        }
+
+        for (var i = 0; filas != null && i < filas.Count; i++)
+        {
+            var filaField = filas[i];
+            if (filaField == null || filaField.FieldType != DocumentFieldType.Dictionary)
+                continue;
+
+            IReadOnlyDictionary<string, DocumentField>? columnas;
+            try
+            {
+                columnas = filaField.Value?.AsDictionary();
+            }
+            catch (Exception ex) when (EsErrorDeLectura(ex))
+            {
+                _logger.LogWarning(ex, "No se pudo leer el campo OCR {Campo} como fila; se aplica el valor por defecto {ValorPorDefecto}.", $"DetalleGastos[{i}]", "fila omitida");
+                continue;
+            }
+            if (columnas == null) continue;
+
+            var conceptoField = BuscarCampo(columnas, "Concepto");
+            var valorField = BuscarCampo(columnas, "Valor");
+
+            var concepto = conceptoField is null ? string.Empty : LeerTexto(conceptoField, $"DetalleGastos[{i}].Concepto") ?? string.Empty;
+            var valor = valorField is null ? 0m : LeerNumero(valorField, $"DetalleGastos[{i}].Valor");
+
+            if (conceptoField is not null) leidos.Add(new CampoLeido($"DetalleGastos[{i}].Concepto", conceptoField.Content, conceptoField.Confidence));
+            if (valorField is not null) leidos.Add(new CampoLeido($"DetalleGastos[{i}].Valor", valorField.Content, valorField.Confidence));
+
+            // Descarta filas completamente vacías
+            if (string.IsNullOrWhiteSpace(concepto) && valor == 0m)
+                continue;
+
+            // La confianza de la fila es la menor de sus dos celdas.
+            var confianzas = new[] { conceptoField?.Confidence, valorField?.Confidence }.Where(c => c.HasValue).Select(c => c!.Value).ToList();
+
+            lista.Add(new GastoDetalleOcrDto(
+                Concepto: string.IsNullOrWhiteSpace(concepto) ? "Gasto no identificado" : concepto,
+                Valor: valor,
+                Confianza: confianzas.Count > 0 ? confianzas.Min() : null
+            ));
         }
 
         return lista;
