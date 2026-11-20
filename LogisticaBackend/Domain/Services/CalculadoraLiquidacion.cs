@@ -1,7 +1,3 @@
-using System.Globalization;
-using System.Text.RegularExpressions;
-using LogisticaBackend.DTOs;
-
 namespace LogisticaBackend.Domain.Services;
 
 public enum FormulaSaldoViaje
@@ -12,6 +8,7 @@ public enum FormulaSaldoViaje
     /// Si gastó más del anticipo entregado, el saldo es positivo (la empresa debe reembolsarle dinero).
     /// Si gastó menos, es negativo (el conductor debe reintegrar sobrante).
     /// </summary>
+    // TODO(negocio): confirmar con el cliente la fórmula oficial del saldo (BalanceAnticipo vs LiquidacionFlete).
     BalanceAnticipo,
 
     /// <summary>
@@ -71,95 +68,4 @@ public static class CalculadoraLiquidacion
     {
         return decimal.Round(valor, 2, MidpointRounding.AwayFromZero);
     }
-
-    /// <summary>
-    /// Regla de Desambiguación de Moneda Colombiana (COP):
-    /// 1. Ambos presentes ('.' y ','):
-    ///    - Si '.' antecede a ',' ("1.500.000,50"): '.' son miles, ',' es decimal.
-    ///    - Si ',' antecede a '.' ("1,500,000.50"): ',' son miles, '.' es decimal.
-    /// 2. Solo coma ',':
-    ///    - Si tiene 1 o 2 dígitos al final ("12,50", "1500,5"): ',' es decimal.
-    ///    - Si tiene bloques de 3 dígitos ("1,500,000"): ',' son miles.
-    /// 3. Solo punto '.':
-    ///    - Si tiene 1 o 2 dígitos al final ("12.50", "1500.5"): '.' es decimal (¡NUNCA 1250!).
-    ///    - Si tiene bloques de 3 dígitos ("1.500.000", "150.000"): '.' son miles.
-    /// </summary>
-    public static decimal ParsearMonedaColombiana(string? texto)
-    {
-        if (string.IsNullOrWhiteSpace(texto))
-            return 0m;
-
-        var str = texto.Trim();
-        bool esNegativo = str.Contains('-') || str.StartsWith('(');
-
-        // Dejar solo dígitos, comas y puntos
-        var limpio = Regex.Replace(str, @"[^\d.,]", "");
-        if (string.IsNullOrWhiteSpace(limpio))
-            return 0m;
-
-        bool tienePunto = limpio.Contains('.');
-        bool tieneComa = limpio.Contains(',');
-        string resultadoStr;
-
-        if (tienePunto && tieneComa)
-        {
-            int ultimoPunto = limpio.LastIndexOf('.');
-            int ultimaComa = limpio.LastIndexOf(',');
-
-            if (ultimoPunto < ultimaComa)
-            {
-                // 1.500.000,50 -> 1500000.50
-                resultadoStr = limpio.Replace(".", "").Replace(',', '.');
-            }
-            else
-            {
-                // 1,500,000.50 -> 1500000.50
-                resultadoStr = limpio.Replace(",", "");
-            }
-        }
-        else if (tieneComa)
-        {
-            var partes = limpio.Split(',');
-            string parteDecimal = partes[^1];
-
-            if (partes.Length == 2 && (parteDecimal.Length == 1 || parteDecimal.Length == 2))
-            {
-                resultadoStr = $"{partes[0]}.{parteDecimal}";
-            }
-            else
-            {
-                // Miles: 1,500,000
-                resultadoStr = limpio.Replace(",", "");
-            }
-        }
-        else if (tienePunto)
-        {
-            var partes = limpio.Split('.');
-            string parteDecimal = partes[^1];
-
-            if (partes.Length == 2 && (parteDecimal.Length == 1 || parteDecimal.Length == 2))
-            {
-                // Decimal: 12.50 o 1500.5
-                resultadoStr = $"{partes[0]}.{parteDecimal}";
-            }
-            else
-            {
-                // Miles: 1.500.000 o 150.000
-                resultadoStr = limpio.Replace(".", "");
-            }
-        }
-        else
-        {
-            resultadoStr = limpio;
-        }
-
-        if (decimal.TryParse(resultadoStr, NumberStyles.Any, CultureInfo.InvariantCulture, out var resultado))
-        {
-            var final = Redondear(resultado);
-            return esNegativo ? -final : final;
-        }
-
-        return 0m;
-    }
 }
-

@@ -86,22 +86,4 @@ public class CalculadoraLiquidacionTests
         CalculadoraLiquidacion.Redondear(100.005m).ShouldBe(100.01m);
         CalculadoraLiquidacion.Redondear(50.005m).ShouldBe(50.01m);
     }
-
-    [Theory]
-    [InlineData("$ 6.976.800", 6976800)]
-    [InlineData("2.800.000", 2800000)]
-    [InlineData("1.500.000,50", 1500000.50)]
-    [InlineData("$ 12.50", 12.50)]
-    [InlineData("12,50", 12.50)]
-    [InlineData("- 50.000", -50000)]
-    [InlineData("(100.000)", -100000)]
-    [InlineData("", 0)]
-    [InlineData("   ", 0)]
-    [InlineData(null, 0)]
-    [InlineData("texto no numerico", 0)]
-    public void ParsearMonedaColombiana_FormatosVariados_ParseaCorrectamente(string? input, decimal esperado)
-    {
-        var resultado = CalculadoraLiquidacion.ParsearMonedaColombiana(input);
-        resultado.ShouldBe(esperado);
-    }
 }
