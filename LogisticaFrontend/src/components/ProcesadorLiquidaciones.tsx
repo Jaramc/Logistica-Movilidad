@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { 
-  PlanillaFormSchema, 
-  type PlanillaFormData, 
-  type GuardarPlanillaDto 
+import {
+  PlanillaFormSchema,
+  type PlanillaFormData,
+  type GuardarPlanillaDto,
+  type SaldoDeclarado
 } from '../features/planillas/schemas/planillaSchema';
-import { calcularLiquidacionEconomica, toApiDecimalNumber } from '../features/planillas/utils/money';
+import { calcularLiquidacionEconomica, describirSaldo, toApiDecimalNumber } from '../features/planillas/utils/money';
+import { useSaldoAnterior } from '../features/planillas/hooks/useSaldoAnterior';
 import { hoyLocalISO } from '../lib/fechas';
 import { usePlanillaExtraccion } from '../features/planillas/hooks/usePlanillaExtraccion';
 import { useGuardarPlanilla } from '../features/planillas/hooks/useGuardarPlanilla';
@@ -23,6 +25,14 @@ export type EstadoFlujo = 'idle' | 'archivoSeleccionado' | 'extrayendo' | 'revis
 
 const ARRAY_VACIO_GASTOS: any[] = [];
 
+/** Lo escrito en papel en la sección SALDOS (no lo calculado). */
+export interface SaldosDeclarados {
+  totalGastos: number | null;
+  saldoViaje: SaldoDeclarado | null;
+  saldoAnterior: SaldoDeclarado | null;
+  saldoNuevo: SaldoDeclarado | null;
+}
+
 export default function ProcesadorLiquidaciones() {
   const [estado, setEstado] = useState<EstadoFlujo>('idle');
   const [archivo, setArchivo] = useState<File | null>(null);
@@ -31,6 +41,7 @@ export default function ProcesadorLiquidaciones() {
   const [jsonOcrCrudo, setJsonOcrCrudo] = useState<string | null>(null);
   const [camposNoEncontrados, setCamposNoEncontrados] = useState<string[]>([]);
   const [confianzaPromedio, setConfianzaPromedio] = useState<number | null>(null);
+  const [declarados, setDeclarados] = useState<SaldosDeclarados | null>(null);
 
   const reviewHeadingRef = useRef<HTMLHeadingElement>(null);
 
@@ -58,7 +69,7 @@ export default function ProcesadorLiquidaciones() {
 
   // Hooks de mutación con TanStack Query
   const { extraer, estaExtrayendo, error: errorOcr, reset: resetOcr } = usePlanillaExtraccion();
-  const { guardar, estaGuardando, error: errorGuardado, esExitoso: guardadoExitoso, reset: resetGuardar } = useGuardarPlanilla();
+  const { guardar, estaGuardando, error: errorGuardado, esExitoso: guardadoExitoso, resultado: guardado, reset: resetGuardar } = useGuardarPlanilla();
 
   // Suscripción reactiva para el cálculo puro de saldos y totales
   const formValores = useWatch({ control: form.control });
@@ -66,6 +77,17 @@ export default function ProcesadorLiquidaciones() {
   const anticipoVal = formValores?.anticipo ?? 0;
   const gastosVal = formValores?.detalleGastos ?? ARRAY_VACIO_GASTOS;
   const saldoAnteriorVal = formValores?.saldoAnterior ?? 0;
+
+  // El saldo anterior lo asigna el servidor (SaldoTotal de la última planilla del conductor): se
+  // consulta para mostrar el cálculo real antes de aprobar y compararlo con el escrito en papel.
+  const { saldoAnterior: saldoAnteriorServidor } = useSaldoAnterior(formValores?.conductor);
+  useEffect(() => {
+    if (estado === 'guardado') return;
+    form.setValue('saldoAnterior', saldoAnteriorServidor ?? 0, { shouldDirty: false });
+  }, [saldoAnteriorServidor, estado, form]);
+  const saldoAnteriorDeclarado = declarados?.saldoAnterior ?? null;
+  const difiereSaldoAnterior =
+    saldoAnteriorServidor !== null && saldoAnteriorDeclarado !== null && saldoAnteriorServidor !== saldoAnteriorDeclarado.valor;
 
   const calculo = useMemo(() => {
     return calcularLiquidacionEconomica(
@@ -103,6 +125,12 @@ export default function ProcesadorLiquidaciones() {
         setJsonOcrCrudo(data.jsonOcrCrudo);
         setCamposNoEncontrados(data.camposNoEncontrados);
         setConfianzaPromedio(data.confianzaPromedio);
+        setDeclarados({
+          totalGastos: data.totalGastosDeclarado,
+          saldoViaje: data.saldoViajeDeclarado,
+          saldoAnterior: data.saldoAnteriorDeclarado,
+          saldoNuevo: data.saldoNuevoDeclarado,
+        });
 
         resetForm({
           placa: data.placa || '',
@@ -149,6 +177,10 @@ export default function ProcesadorLiquidaciones() {
         valor: toApiDecimalNumber(g.valor),
       })),
       jsonOcrCrudo,
+      totalGastosDeclarado: declarados?.totalGastos ?? null,
+      saldoViajeDeclarado: declarados?.saldoViaje?.valor ?? null,
+      saldoAnteriorDeclarado: declarados?.saldoAnterior?.valor ?? null,
+      saldoNuevoDeclarado: declarados?.saldoNuevo?.valor ?? null,
     };
 
     try {
@@ -163,6 +195,7 @@ export default function ProcesadorLiquidaciones() {
     setJsonOcrCrudo(null);
     setCamposNoEncontrados([]);
     setConfianzaPromedio(null);
+    setDeclarados(null);
   };
 
   const reiniciarProceso = () => {
@@ -211,6 +244,7 @@ export default function ProcesadorLiquidaciones() {
             anticipo={anticipoVal}
             calculo={calculo}
             cantidadGastos={gastosVal.length}
+            saldoAnterior={saldoAnteriorVal}
           />
         )}
       </div>
@@ -219,6 +253,14 @@ export default function ProcesadorLiquidaciones() {
       {guardadoExitoso && estado === 'guardado' && (
         <Alert variant="success" title="Liquidación Guardada y Aprobada" className="mb-6">
           La planilla de viaje fue validada y persistida exitosamente en PostgreSQL.
+        </Alert>
+      )}
+
+      {guardadoExitoso && estado === 'guardado' && (guardado?.advertencias?.length ?? 0) > 0 && (
+        <Alert variant="warning" title="Revisa estas diferencias" className="mb-6">
+          <ul className="list-disc pl-4 space-y-1">
+            {guardado!.advertencias!.map((a) => <li key={a}>{a}</li>)}
+          </ul>
         </Alert>
       )}
 
@@ -290,6 +332,13 @@ export default function ProcesadorLiquidaciones() {
                     No encontrados: {camposNoEncontrados.join(', ')}. Revísalos antes de aprobar.
                   </span>
                 )}
+              </div>
+            )}
+
+            {difiereSaldoAnterior && estado !== 'guardado' && (
+              <div className="px-5 py-2 text-xs border-b border-amber-200 bg-amber-50 text-amber-900" role="status" data-testid="aviso-saldo-anterior">
+                El saldo anterior escrito en la planilla ({describirSaldo(saldoAnteriorDeclarado!.valor)}) difiere del que
+                asigna el sistema ({describirSaldo(saldoAnteriorServidor!)}). Se guardará el del sistema.
               </div>
             )}
 

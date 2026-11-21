@@ -161,11 +161,34 @@ export function toApiDecimalNumber(valor: BigSource): number {
 
 export type ModoCalculoSaldo = 'balance_anticipo' | 'liquidacion_flete';
 
+export type AFavorDe = 'Conductor' | 'Empresa';
+
+/**
+ * Convención de signo de los saldos (igual en el backend y la BD):
+ * positivo = la empresa le debe al conductor; negativo = el conductor le debe a la empresa.
+ */
+export function aFavorDe(saldo: BigSource): AFavorDe | null {
+  const b = parseCOP(saldo);
+  if (b.gt(0)) return 'Conductor';
+  if (b.lt(0)) return 'Empresa';
+  return null;
+}
+
+/** "$63.500 a favor de la empresa" (siempre en valor absoluto). */
+export function describirSaldo(saldo: BigSource): string {
+  const b = parseCOP(saldo);
+  const quien = aFavorDe(b);
+  const monto = formatCOP(b.abs());
+  if (quien === 'Conductor') return `${monto} a favor del conductor`;
+  if (quien === 'Empresa') return `${monto} a favor de la empresa`;
+  return monto;
+}
+
 /**
  * Cálculo Puro de Totales y Saldos de la Planilla:
  * 
- * NOTA DE NEGOCIO SOBRE AMBIGÜEDAD DE FÓRMULA:
- * - Modo 'balance_anticipo' (Por defecto en el código existente):
+ * - Modo 'balance_anticipo' (oficial, por defecto; confirmado con cinco planillas reales encadenadas,
+ *   p. ej. 2.869.200 − 2.800.000 = 69.200 a favor del conductor; ver CalculadoraLiquidacion.cs):
  *   Saldo Viaje = Total Gastos - Anticipo.
  *   Mide la cuenta corriente del conductor: si gastó más que el anticipo entregado,
  *   el saldo es positivo (la empresa debe reembolsarle dinero). Si gastó menos,

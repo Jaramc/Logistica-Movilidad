@@ -108,11 +108,7 @@ public class PlanillasController : ControllerBase
         }
 
         // El saldo anterior NUNCA viene del cliente: es el SaldoTotal de la última planilla del conductor.
-        var saldoAnterior = await _context.Planillas.AsNoTracking()
-            .Where(p => p.Conductor.ToUpper() == conductor)
-            .OrderByDescending(p => p.FechaFinal).ThenByDescending(p => p.Id)
-            .Select(p => (decimal?)p.SaldoTotal)
-            .FirstOrDefaultAsync(cancellationToken) ?? 0m;
+        var (saldoAnterior, _) = await SaldoAnteriorAsync(conductor, cancellationToken);
 
         var calculo = CalculadoraLiquidacion.Calcular(
             dto.Flete, dto.Anticipo, dto.Gastos.Select(g => g.Valor), saldoAnterior);
@@ -171,13 +167,65 @@ public class PlanillasController : ControllerBase
         }
 
         _logger.LogInformation("Planilla {Id} guardada por el usuario {UsuarioId}.", entidad.Id, usuarioId);
+        var advertencias = new List<string>();
+        if (dto.SaldoAnteriorDeclarado is { } declarado && CalculadoraLiquidacion.Redondear(declarado) != entidad.SaldoAnterior)
+        {
+            advertencias.Add($"El saldo anterior escrito en la planilla ({DescribirSaldo(declarado)}) difiere del calculado " +
+                $"desde la última planilla del conductor ({DescribirSaldo(entidad.SaldoAnterior)}). Se guardó el calculado.");
+        }
         await _auditoria.RegistrarAsync(AccionesAuditoria.PlanillaGuardada, true, usuarioId, "PlanillaViaje", entidad.Id.ToString(),
             new { placa = entidad.Placa, renglones = entidad.Gastos.Count, entidad.TotalGastos, entidad.SaldoTotal });
 
         return CreatedAtAction(
             nameof(ObtenerPlanillaPorId),
             new { id = entidad.Id },
-            new PlanillaGuardadaDto("Planilla aprobada y guardada.", entidad.Id, ADetalle(entidad)));
+            new PlanillaGuardadaDto("Planilla aprobada y guardada.", entidad.Id, ADetalle(entidad),
+                advertencias.Count > 0 ? advertencias : null));
+    }
+
+    /// <summary>
+    /// Saldo anterior que tendrá la próxima planilla del conductor (el SaldoTotal de su última planilla).
+    /// La UI lo muestra antes de aprobar para compararlo con el escrito en papel.
+    /// </summary>
+    [HttpGet("saldo-anterior")]
+    [Authorize(Policy = Politicas.PuedeLeer)]
+    [ProducesResponseType(typeof(SaldoAnteriorDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> ObtenerSaldoAnterior([FromQuery] string? conductor, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(conductor) || conductor.Length > 150)
+        {
+            return Problemas.Validacion(HttpContext, new Dictionary<string, string[]>
+            {
+                ["conductor"] = new[] { "Indique el conductor (máximo 150 caracteres)." },
+            });
+        }
+
+        var normalizado = NormalizarConductor(conductor);
+        var (saldo, planillaId) = await SaldoAnteriorAsync(normalizado, cancellationToken);
+        return Ok(new SaldoAnteriorDto(normalizado, saldo, planillaId));
+    }
+
+    private async Task<(decimal Saldo, int? PlanillaId)> SaldoAnteriorAsync(string conductorNormalizado, CancellationToken cancellationToken)
+    {
+        var ultima = await _context.Planillas.AsNoTracking()
+            .Where(p => p.Conductor.ToUpper() == conductorNormalizado)
+            .OrderByDescending(p => p.FechaFinal).ThenByDescending(p => p.Id)
+            .Select(p => new { p.Id, p.SaldoTotal })
+            .FirstOrDefaultAsync(cancellationToken);
+        return ultima is null ? (0m, null) : (ultima.SaldoTotal, ultima.Id);
+    }
+
+    /// <summary>"$63.500 a favor de la empresa": positivo = a favor del conductor.</summary>
+    private static string DescribirSaldo(decimal saldo)
+    {
+        var texto = "$" + Math.Abs(saldo).ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("es-CO"));
+        return saldo switch
+        {
+            > 0m => texto + " a favor del conductor",
+            < 0m => texto + " a favor de la empresa",
+            _ => texto,
+        };
     }
 
     /// <summary>Historial paginado (máximo 100 por página) con filtros por fechas, placa y conductor.</summary>

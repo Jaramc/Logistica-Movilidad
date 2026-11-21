@@ -11,6 +11,8 @@ public class GuardarPlanillaDtoValidator : AbstractValidator<GuardarPlanillaDto>
     public GuardarPlanillaDtoValidator(IOptions<LiquidacionesOptions> opciones, TimeProvider reloj)
     {
         var tope = opciones.Value.TopeValorMonetario;
+        var topeSaldo = opciones.Value.TopeSaldo;
+        var topeSaldoTexto = topeSaldo.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("es-CO"));
         var maxRenglones = opciones.Value.MaximoRenglonesGasto;
         var topeTexto = tope.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("es-CO"));
 
@@ -49,6 +51,16 @@ public class GuardarPlanillaDtoValidator : AbstractValidator<GuardarPlanillaDto>
             .WithMessage($"El flete debe estar entre 0 y {topeTexto}.");
         RuleFor(x => x.Anticipo).InclusiveBetween(0m, tope)
             .WithMessage($"El anticipo debe estar entre 0 y {topeTexto}.");
+
+        RuleFor(x => x.TotalGastosDeclarado).InclusiveBetween(0m, topeSaldo)
+            .When(x => x.TotalGastosDeclarado is not null)
+            .WithMessage($"El total de gastos declarado debe estar entre 0 y {topeSaldoTexto}.");
+        RuleFor(x => x.SaldoViajeDeclarado).InclusiveBetween(-topeSaldo, topeSaldo)
+            .When(x => x.SaldoViajeDeclarado is not null).WithMessage($"El saldo declarado debe estar entre ±{topeSaldoTexto}.");
+        RuleFor(x => x.SaldoAnteriorDeclarado).InclusiveBetween(-topeSaldo, topeSaldo)
+            .When(x => x.SaldoAnteriorDeclarado is not null).WithMessage($"El saldo declarado debe estar entre ±{topeSaldoTexto}.");
+        RuleFor(x => x.SaldoNuevoDeclarado).InclusiveBetween(-topeSaldo, topeSaldo)
+            .When(x => x.SaldoNuevoDeclarado is not null).WithMessage($"El saldo declarado debe estar entre ±{topeSaldoTexto}.");
 
         RuleFor(x => x.Gastos)
             .NotNull().WithMessage("La lista de gastos es obligatoria.")

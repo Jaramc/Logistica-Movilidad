@@ -13,6 +13,20 @@ export const GastoItemSchema = z.object({
 export type GastoItem = z.infer<typeof GastoItemSchema>;
 
 /**
+ * Saldo escrito en la planilla. valor con signo: positivo = la empresa le debe al conductor;
+ * negativo = el conductor le debe a la empresa.
+ */
+export const SaldoDeclaradoSchema = z
+  .object({
+    valor: z.number(),
+    aFavorDe: z.enum(['Conductor', 'Empresa']).nullish().transform(v => v ?? null),
+  })
+  .nullish()
+  .transform(v => v ?? null);
+
+export type SaldoDeclarado = NonNullable<z.infer<typeof SaldoDeclaradoSchema>>;
+
+/**
  * Esquema de validación en runtime para la respuesta del OCR de Azure AI Document Intelligence.
  * Es tolerante a nombres de campos nulos o variantes del modelo sin romper la UI.
  */
@@ -39,6 +53,11 @@ export const PlanillaOcrResponseSchema = z.object({
     camposNoEncontrados: z.array(z.string()).nullish().transform(val => val ?? []),
     /** Copia de auditoría de los campos leídos; se reenvía tal cual al guardar. */
     jsonOcrCrudo: z.string().nullish().transform(val => val ?? null),
+    /** Lo escrito en papel (no lo calculado): se muestra al revisor y se guarda para auditoría. */
+    totalGastosDeclarado: z.number().nullish().transform(val => val ?? null),
+    saldoViajeDeclarado: SaldoDeclaradoSchema,
+    saldoAnteriorDeclarado: SaldoDeclaradoSchema,
+    saldoNuevoDeclarado: SaldoDeclaradoSchema,
   }).nullish(),
 });
 
@@ -97,6 +116,11 @@ export const GuardarPlanillaDtoSchema = z.object({
   ),
   /** El jsonOcrCrudo que devolvió /extraer. El servidor lo valida (≤ 256 KB, JSON) o guarda null. */
   jsonOcrCrudo: z.string().nullable().optional(),
+  /** Valores escritos en papel (con signo). Solo auditoría: el servidor nunca los usa para calcular. */
+  totalGastosDeclarado: z.number().nullable().optional(),
+  saldoViajeDeclarado: z.number().nullable().optional(),
+  saldoAnteriorDeclarado: z.number().nullable().optional(),
+  saldoNuevoDeclarado: z.number().nullable().optional(),
 });
 
 export type GuardarPlanillaDto = z.infer<typeof GuardarPlanillaDtoSchema>;

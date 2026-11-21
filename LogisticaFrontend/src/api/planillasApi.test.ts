@@ -2,8 +2,9 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { 
   extraerPlanillaOcrApi, 
   guardarPlanillaApi, 
-  descargarConsolidadoApi, 
-  obtenerHistorialApi 
+  descargarConsolidadoApi,
+  obtenerHistorialApi,
+  obtenerSaldoAnteriorApi
 } from './planillasApi';
 import type { GuardarPlanillaDto } from '../features/planillas/schemas/planillaSchema';
 
@@ -85,6 +86,29 @@ describe('planillasApi.ts - Rutas Canónicas del Backend', () => {
       expect(resultado.data?.camposNoEncontrados).toEqual(['Destino', 'Flete']);
       expect(resultado.data?.jsonOcrCrudo).toBe(jsonOcrCrudo);
     });
+
+    it('expone los saldos declarados con signo y a favor de quién', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({
+          mensaje: 'ok',
+          data: {
+            placa: 'STW514', flete: 6976800, anticipo: 2800000, totalGastos: 2819200, saldoViaje: 19200, detalleGastos: [],
+            totalGastosDeclarado: 2869200,
+            saldoViajeDeclarado: { valor: 69200, aFavorDe: 'Conductor' },
+            saldoAnteriorDeclarado: { valor: -63500, aFavorDe: 'Empresa' },
+            saldoNuevoDeclarado: null,
+          },
+        }),
+      });
+
+      const r = await extraerPlanillaOcrApi(new File(['%PDF-1.4'], 'p.pdf', { type: 'application/pdf' }));
+      expect(r.data?.totalGastosDeclarado).toBe(2869200);
+      expect(r.data?.saldoAnteriorDeclarado).toEqual({ valor: -63500, aFavorDe: 'Empresa' });
+      expect(r.data?.saldoNuevoDeclarado).toBeNull();
+    });
   });
 
   describe('guardarPlanillaApi', () => {
@@ -160,6 +184,25 @@ describe('planillasApi.ts - Rutas Canónicas del Backend', () => {
       expect(enviado).not.toHaveProperty('saldoTotal');
       expect(enviado).not.toHaveProperty('id');
       expect(res.id).toBe(42);
+    });
+  });
+
+  describe('obtenerSaldoAnteriorApi', () => {
+    it('llama a GET /api/planillas/saldo-anterior con el conductor', async () => {
+      let capturedUrl = '';
+      globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
+        capturedUrl = url;
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({ conductor: 'PEDRO PEREZ', saldoAnterior: -63500, planillaAnteriorId: 3 }),
+        };
+      });
+
+      const r = await obtenerSaldoAnteriorApi('Pedro Perez');
+      expect(capturedUrl).toBe('/api/planillas/saldo-anterior?conductor=Pedro+Perez');
+      expect(r.saldoAnterior).toBe(-63500);
     });
   });
 

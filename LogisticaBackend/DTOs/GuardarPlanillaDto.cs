@@ -20,7 +20,13 @@ public record GuardarPlanillaDto(
     decimal Flete,
     decimal Anticipo,
     List<GastoItemDto> Gastos,
-    string? JsonOcrCrudo = null
+    string? JsonOcrCrudo = null,
+    // Valores escritos en papel, tal como los leyó el OCR (con signo: positivo = la empresa le debe
+    // al conductor). Se guardan para auditoría y para marcar diferencias: nunca reemplazan el cálculo.
+    decimal? TotalGastosDeclarado = null,
+    decimal? SaldoViajeDeclarado = null,
+    decimal? SaldoAnteriorDeclarado = null,
+    decimal? SaldoNuevoDeclarado = null
 );
 
 /// <summary>Renglón de gasto enviado por el formulario.</summary>
@@ -29,8 +35,14 @@ public record GastoItemDto(
     decimal Valor
 );
 
-/// <summary>Respuesta de guardar: la planilla tal como quedó con los totales del servidor.</summary>
-public record PlanillaGuardadaDto(string Mensaje, int Id, PlanillaDetalleDto Data);
+/// <summary>
+/// Respuesta de guardar: la planilla tal como quedó con los totales del servidor y las advertencias
+/// (p. ej. el saldo anterior escrito en papel difiere del calculado).
+/// </summary>
+public record PlanillaGuardadaDto(string Mensaje, int Id, PlanillaDetalleDto Data, List<string>? Advertencias = null);
+
+/// <summary>Saldo anterior que el servidor le asignará a la próxima planilla del conductor.</summary>
+public record SaldoAnteriorDto(string Conductor, decimal SaldoAnterior, int? PlanillaAnteriorId);
 
 /// <summary>Filtros y paginación del historial. Tamaño máximo de página: 100.</summary>
 public sealed class ConsultaPlanillasDto

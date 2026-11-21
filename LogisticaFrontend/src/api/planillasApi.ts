@@ -39,11 +39,31 @@ export async function extraerPlanillaOcrApi(
   return parseResult.data;
 }
 
-/** Respuesta de guardar: totales calculados por el servidor. */
+/** Respuesta de guardar: totales calculados por el servidor y advertencias (p. ej. saldo anterior distinto). */
 export interface PlanillaGuardada {
   mensaje: string;
   id: number;
-  data: { placa: string; totalGastos: number; saldoViaje: number; saldoTotal: number };
+  data: { placa: string; totalGastos: number; saldoViaje: number; saldoAnterior: number; saldoTotal: number };
+  advertencias?: string[] | null;
+}
+
+export interface SaldoAnterior {
+  conductor: string;
+  /** Con signo: positivo = la empresa le debe al conductor. */
+  saldoAnterior: number;
+  planillaAnteriorId: number | null;
+}
+
+/**
+ * Saldo anterior que el servidor asignará a la próxima planilla del conductor.
+ * Ruta: GET /api/planillas/saldo-anterior?conductor=
+ */
+export async function obtenerSaldoAnteriorApi(conductor: string, signal?: AbortSignal): Promise<SaldoAnterior> {
+  const params = new URLSearchParams({ conductor });
+  return await apiClient<SaldoAnterior>(`/api/planillas/saldo-anterior?${params.toString()}`, {
+    method: 'GET',
+    signal,
+  });
 }
 
 /**

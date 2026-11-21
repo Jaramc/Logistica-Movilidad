@@ -3,12 +3,14 @@ namespace LogisticaBackend.Domain.Services;
 public enum FormulaSaldoViaje
 {
     /// <summary>
-    /// Fórmula por defecto (Balance de Anticipo del Conductor):
-    /// Saldo Viaje = Total Gastos - Anticipo.
-    /// Si gastó más del anticipo entregado, el saldo es positivo (la empresa debe reembolsarle dinero).
-    /// Si gastó menos, es negativo (el conductor debe reintegrar sobrante).
+    /// Fórmula oficial (Balance de Anticipo del Conductor):
+    /// Saldo Viaje = Total Gastos - Anticipo; Saldo Total (saldo nuevo) = Saldo Viaje + Saldo Anterior.
+    /// Positivo = la empresa le debe al conductor; negativo = el conductor le debe a la empresa.
+    /// Confirmada con cinco planillas reales encadenadas (el saldo nuevo de una es el anterior de la
+    /// siguiente), p. ej. la de Cliente Ejemplo (13 al 19-06-26): 2.869.200 - 2.800.000 = 69.200 a favor
+    /// del conductor, y 69.200 - 63.500 (a favor de la empresa) = 5.700 a favor del conductor.
+    /// Ver docs/ocr/planilla_real_01.campos.json.
     /// </summary>
-    // TODO(negocio): confirmar con el cliente la fórmula oficial del saldo (BalanceAnticipo vs LiquidacionFlete).
     BalanceAnticipo,
 
     /// <summary>

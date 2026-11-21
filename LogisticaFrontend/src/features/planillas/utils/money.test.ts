@@ -167,3 +167,21 @@ describe('money.ts - Utilidades Financieras COP y Precisión Contable', () => {
   });
 });
 
+
+import { aFavorDe, describirSaldo } from './money';
+
+describe('aFavorDe / describirSaldo — convención de signo de los saldos', () => {
+  it.each([
+    [69200, 'Conductor'],
+    [-63500, 'Empresa'],
+    ['5.700', 'Conductor'],
+    [0, null],
+  ] as const)('%s → %s', (saldo, esperado) => {
+    expect(aFavorDe(saldo)).toBe(esperado);
+  });
+
+  it('describe el saldo en valor absoluto y a favor de quién', () => {
+    expect(describirSaldo(-63500)).toMatch(/63\.500 a favor de la empresa$/);
+    expect(describirSaldo(5700)).toMatch(/5\.700 a favor del conductor$/);
+  });
+});

@@ -105,6 +105,51 @@ public class PlanillasIntegracionTests
     }
 
     [Fact]
+    public async Task SaldoAnterior_DevuelveElSaldoTotalDeLaUltimaPlanilla_YAdvierteSiElEscritoDifiere()
+    {
+        var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
+        using (cliente)
+        {
+            var conductor = "SALDOS " + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+
+            var sinPlanillas = await (await cliente.Http.GetAsync($"/api/planillas/saldo-anterior?conductor={Uri.EscapeDataString(conductor)}")).JsonAsync();
+            sinPlanillas.GetProperty("saldoAnterior").GetDecimal().ShouldBe(0m);
+            sinPlanillas.GetProperty("planillaAnteriorId").ValueKind.ShouldBe(System.Text.Json.JsonValueKind.Null);
+
+            // Gastos 120.000 sin anticipo: 120.000 a favor del conductor.
+            var primera = await cliente.PostAsync("/api/planillas", new
+            {
+                placa = "STW514", conductor, origen = "Buenaventura", destino = "Urbano", fechaInicial = "2026-06-13", fechaFinal = "2026-06-13",
+                flete = 0m, anticipo = 0m, gastos = new[] { new { concepto = "PORCENTAJE", valor = 120_000m } },
+            });
+            primera.StatusCode.ShouldBe(HttpStatusCode.Created, await primera.Content.ReadAsStringAsync());
+            var idPrimera = (await primera.JsonAsync()).GetProperty("id").GetInt32();
+
+            var r = await cliente.Http.GetAsync($"/api/planillas/saldo-anterior?conductor={Uri.EscapeDataString("  " + conductor.ToLowerInvariant())}");
+            r.StatusCode.ShouldBe(HttpStatusCode.OK);
+            var saldo = await r.JsonAsync();
+            saldo.GetProperty("conductor").GetString().ShouldBe(conductor);
+            saldo.GetProperty("saldoAnterior").GetDecimal().ShouldBe(120_000m);
+            saldo.GetProperty("planillaAnteriorId").GetInt32().ShouldBe(idPrimera);
+
+            // En papel dice 63.500 a favor de la empresa; el sistema calcula 120.000 a favor del conductor.
+            var segunda = await cliente.PostAsync("/api/planillas", new
+            {
+                placa = "STW514", conductor, origen = "Buenaventura", destino = "Medellin", fechaInicial = "2026-06-13", fechaFinal = "2026-06-19",
+                flete = 0m, anticipo = 0m, gastos = new[] { new { concepto = "PEAJES", valor = 10_000m } },
+                saldoAnteriorDeclarado = -63_500m,
+            });
+            segunda.StatusCode.ShouldBe(HttpStatusCode.Created, await segunda.Content.ReadAsStringAsync());
+            var cuerpo = await segunda.JsonAsync();
+            cuerpo.GetProperty("data").GetProperty("saldoAnterior").GetDecimal().ShouldBe(120_000m); // no se sobrescribe
+            cuerpo.GetProperty("advertencias")[0].GetString()!.ShouldContain("$63.500 a favor de la empresa");
+
+            var vacio = await cliente.Http.GetAsync("/api/planillas/saldo-anterior?conductor=");
+            vacio.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+        }
+    }
+
+    [Fact]
     public async Task Guardar_ValidaPlacaFechasYTopesEnElServidor()
     {
         var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
