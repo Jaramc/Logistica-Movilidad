@@ -62,7 +62,9 @@ public class ExcelExportService : IExcelExportService
             "Papelería", "Otros",
             // Totales y Balances (Z a AF)
             "Total Gastos", "Flete", "Anticipo", "Saldo Viaje", "Saldo Anterior", "Saldo Total",
-            "Estado", "Fecha Registro UTC"
+            "Estado", "Fecha Registro UTC",
+            // Lo escrito en papel frente a lo calculado (AH, AI)
+            "Total declarado", "Diferencia"
         };
 
         // Estilos de cabecera
@@ -117,6 +119,20 @@ public class ExcelExportService : IExcelExportService
 
             worksheet.Cell(row, 32).Value = p.EstadoRevision.ToString();
             worksheet.Cell(row, 33).Value = p.CreadoEn.ToString("yyyy-MM-dd HH:mm:ss");
+
+            // Total declarado en papel y diferencia (declarado − calculado); vacías si no hubo OCR.
+            if (p.TotalGastosDeclarado is { } declarado)
+            {
+                worksheet.Cell(row, 34).Value = (double)declarado;
+                worksheet.Cell(row, 35).Value = (double)(declarado - p.TotalGastos);
+                worksheet.Cell(row, 34).Style.NumberFormat.Format = "$ #,##0.00";
+                worksheet.Cell(row, 35).Style.NumberFormat.Format = "$ #,##0.00";
+            }
+
+            if (p.TieneDiferencias)
+            {
+                worksheet.Range(row, 1, row, headers.Length).Style.Fill.BackgroundColor = XLColor.FromHtml("#FEF3C7");
+            }
 
             row++;
         }

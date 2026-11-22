@@ -8,7 +8,11 @@ public class GastoDetalleConfiguration : IEntityTypeConfiguration<GastoDetalle>
 {
     public void Configure(EntityTypeBuilder<GastoDetalle> builder)
     {
-        builder.ToTable("gastos_detalle");
+        builder.ToTable("gastos_detalle", t =>
+        {
+            t.HasCheckConstraint(RestriccionesPlanilla.ValorNoNegativo, "valor >= 0");
+            t.HasCheckConstraint(RestriccionesPlanilla.CategoriaValida, $"concepto_canonico IN ({RestriccionesPlanilla.CategoriasSql})");
+        });
 
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id)
@@ -29,6 +33,9 @@ public class GastoDetalleConfiguration : IEntityTypeConfiguration<GastoDetalle>
             .HasMaxLength(50)
             .HasDefaultValue("OTROS")
             .IsRequired();
+
+        builder.Property(x => x.Etiqueta).HasColumnName("etiqueta").HasMaxLength(60);
+        builder.Property(x => x.Descripcion).HasColumnName("descripcion").HasMaxLength(200);
 
         builder.Property(x => x.Valor)
             .HasColumnName("valor")

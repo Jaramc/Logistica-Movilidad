@@ -17,6 +17,6 @@ public class LiquidacionesOptions
     /// </summary>
     public decimal TopeSaldo { get; set; } = 100_000_000m;
 
-    /// <summary>Máximo de renglones de gasto por planilla.</summary>
-    public int MaximoRenglonesGasto { get; set; } = 100;
+    /// <summary>Máximo de renglones de gasto por planilla (la planilla impresa tiene menos de 30).</summary>
+    public int MaximoRenglonesGasto { get; set; } = 60;
 }

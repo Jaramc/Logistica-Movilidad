@@ -8,7 +8,14 @@ public class PlanillaViajeConfiguration : IEntityTypeConfiguration<PlanillaViaje
 {
     public void Configure(EntityTypeBuilder<PlanillaViaje> builder)
     {
-        builder.ToTable("planillas_viaje");
+        builder.ToTable("planillas_viaje", t =>
+        {
+            // Defensa en la base: aunque alguien salte la API, no entra basura. La migración
+            // RestriccionesPlanilla las crea NOT VALID y solo las valida si los datos existentes cumplen.
+            t.HasCheckConstraint(RestriccionesPlanilla.EmpresaConLetras, "empresa_transportadora IS NULL OR empresa_transportadora ~ '[[:alpha:]].*[[:alpha:]]'");
+            t.HasCheckConstraint(RestriccionesPlanilla.PlacaFormato, "placa ~ '^[A-Z]{3}[0-9]{3}$'");
+            t.HasCheckConstraint(RestriccionesPlanilla.FechasEnOrden, "fecha_final >= fecha_inicial");
+        });
 
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id)
@@ -58,6 +65,12 @@ public class PlanillaViajeConfiguration : IEntityTypeConfiguration<PlanillaViaje
         ConfigureDecimal(builder.Property(x => x.SaldoViaje), "saldo_viaje");
         ConfigureDecimal(builder.Property(x => x.SaldoAnterior), "saldo_anterior");
         ConfigureDecimal(builder.Property(x => x.SaldoTotal), "saldo_total");
+
+        builder.Property(x => x.TotalGastosDeclarado).HasColumnName("total_gastos_declarado").HasPrecision(14, 2);
+        builder.Property(x => x.SaldoViajeDeclarado).HasColumnName("saldo_viaje_declarado").HasPrecision(14, 2);
+        builder.Property(x => x.SaldoAnteriorDeclarado).HasColumnName("saldo_anterior_declarado").HasPrecision(14, 2);
+        builder.Property(x => x.SaldoNuevoDeclarado).HasColumnName("saldo_nuevo_declarado").HasPrecision(14, 2);
+        builder.Property(x => x.TieneDiferencias).HasColumnName("tiene_diferencias").HasDefaultValue(false).IsRequired();
 
         builder.Property(x => x.EstadoRevision)
             .HasColumnName("estado_revision")
@@ -113,4 +126,18 @@ public class PlanillaViajeConfiguration : IEntityTypeConfiguration<PlanillaViaje
             .HasPrecision(14, 2)
             .HasDefaultValue(0m);
     }
+}
+
+/// <summary>Nombres de los CHECK de la planilla (los usa la migración RestriccionesPlanilla).</summary>
+public static class RestriccionesPlanilla
+{
+    public const string EmpresaConLetras = "ck_planillas_viaje_empresa_con_letras";
+    public const string PlacaFormato = "ck_planillas_viaje_placa_formato";
+    public const string FechasEnOrden = "ck_planillas_viaje_fechas_en_orden";
+    public const string ValorNoNegativo = "ck_gastos_detalle_valor_no_negativo";
+    public const string CategoriaValida = "ck_gastos_detalle_categoria_valida";
+
+    /// <summary>Las 16 categorías como lista SQL: 'PEAJES', 'PORCENTAJE', ...</summary>
+    public static string CategoriasSql =>
+        string.Join(", ", LogisticaBackend.Domain.Services.ConceptoNormalizer.CategoriasCanonicas.Select(c => $"'{c}'"));
 }

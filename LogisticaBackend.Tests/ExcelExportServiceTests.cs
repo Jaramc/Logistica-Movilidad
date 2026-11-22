@@ -25,7 +25,7 @@ public class ExcelExportServiceTests
     }
 
     [Fact]
-    public async Task GenerarConsolidadoExcelAsync_SinRegistros_GeneraEncabezadosY33Columnas()
+    public async Task GenerarConsolidadoExcelAsync_SinRegistros_GeneraEncabezadosY35Columnas()
     {
         var (service, _) = CrearServiceConDb();
 
@@ -38,8 +38,8 @@ public class ExcelExportServiceTests
         var worksheet = workbook.Worksheet("Consolidado Planillas");
         worksheet.ShouldNotBeNull();
 
-        // Verificar columnas A a AG (33 columnas)
-        worksheet.LastColumnUsed()?.ColumnNumber().ShouldBe(33);
+        // Verificar columnas A a AI (35 columnas)
+        worksheet.LastColumnUsed()?.ColumnNumber().ShouldBe(35);
 
         // Fila 1 debe tener encabezados
         worksheet.Cell(1, 1).GetString().ShouldBe("ID");
@@ -49,6 +49,41 @@ public class ExcelExportServiceTests
         worksheet.Cell(1, 25).GetString().ShouldBe("Otros");  // Columna Y (última categoría canónica)
         worksheet.Cell(1, 32).GetString().ShouldBe("Estado"); // Columna AF
         worksheet.Cell(1, 33).GetString().ShouldBe("Fecha Registro UTC"); // Columna AG
+        worksheet.Cell(1, 34).GetString().ShouldBe("Total declarado");    // Columna AH
+        worksheet.Cell(1, 35).GetString().ShouldBe("Diferencia");         // Columna AI
+    }
+
+    [Fact]
+    public async Task GenerarConsolidadoExcelAsync_ConDiferencias_MuestraTotalDeclaradoYResaltaLaFilaEnAmbar()
+    {
+        var (service, context) = CrearServiceConDb();
+        context.Planillas.AddRange(
+            new PlanillaViaje
+            {
+                Id = 201, Placa = "STW514", Conductor = "PEDRO", FechaInicial = new DateOnly(2026, 6, 13), FechaFinal = new DateOnly(2026, 6, 19),
+                TotalGastos = 2_819_200m, TotalGastosDeclarado = 2_869_200m, TieneDiferencias = true,
+                EstadoRevision = EstadoRevision.Aprobado, CreadoEn = DateTime.UtcNow,
+            },
+            new PlanillaViaje
+            {
+                Id = 202, Placa = "STW514", Conductor = "PEDRO", FechaInicial = new DateOnly(2026, 6, 1), FechaFinal = new DateOnly(2026, 6, 2),
+                TotalGastos = 120_000m, EstadoRevision = EstadoRevision.Aprobado, CreadoEn = DateTime.UtcNow,
+            });
+        await context.SaveChangesAsync();
+
+        using var stream = await service.GenerarConsolidadoExcelAsync();
+        using var workbook = new XLWorkbook(stream);
+        var ws = workbook.Worksheet("Consolidado Planillas");
+
+        // Fila 2: la del 13-06 (orden por fecha descendente).
+        ws.Cell(2, 1).GetDouble().ShouldBe(201);
+        ws.Cell(2, 34).GetDouble().ShouldBe(2_869_200);
+        ws.Cell(2, 35).GetDouble().ShouldBe(50_000);
+        ws.Cell(2, 1).Style.Fill.BackgroundColor.ShouldBe(XLColor.FromHtml("#FEF3C7"));
+
+        // Fila 3: sin OCR ni diferencias: columnas vacías y sin resaltar.
+        ws.Cell(3, 34).IsEmpty().ShouldBeTrue();
+        ws.Cell(3, 1).Style.Fill.BackgroundColor.ShouldNotBe(XLColor.FromHtml("#FEF3C7"));
     }
 
     [Fact]

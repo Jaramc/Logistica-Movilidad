@@ -144,6 +144,14 @@ public class PlanillasController : ControllerBase
             TotalGastos = calculo.TotalGastos,
             SaldoViaje = calculo.SaldoViaje,
             SaldoTotal = calculo.SaldoTotal,
+            TotalGastosDeclarado = Declarado(dto.TotalGastosDeclarado),
+            SaldoViajeDeclarado = Declarado(dto.SaldoViajeDeclarado),
+            SaldoAnteriorDeclarado = Declarado(dto.SaldoAnteriorDeclarado),
+            SaldoNuevoDeclarado = Declarado(dto.SaldoNuevoDeclarado),
+            TieneDiferencias = Difiere(dto.TotalGastosDeclarado, calculo.TotalGastos)
+                || Difiere(dto.SaldoViajeDeclarado, calculo.SaldoViaje)
+                || Difiere(dto.SaldoAnteriorDeclarado, saldoAnterior)
+                || Difiere(dto.SaldoNuevoDeclarado, calculo.SaldoTotal),
             EstadoRevision = EstadoRevision.Aprobado,
             JsonOcrCrudo = jsonOcr,
             CreadoPorUsuarioId = usuarioId,
@@ -157,6 +165,8 @@ public class PlanillasController : ControllerBase
                 ConceptoCanonico = string.IsNullOrWhiteSpace(g.Categoria)
                     ? ConceptoNormalizer.Normalizar(g.Concepto)
                     : g.Categoria.Trim().ToUpperInvariant(),
+                Etiqueta = string.IsNullOrWhiteSpace(g.Etiqueta) ? null : g.Etiqueta.Trim(),
+                Descripcion = string.IsNullOrWhiteSpace(g.Descripcion) ? null : g.Descripcion.Trim(),
                 Valor = CalculadoraLiquidacion.Redondear(g.Valor),
                 Orden = idx + 1
             }).ToList()
@@ -218,6 +228,11 @@ public class PlanillasController : ControllerBase
             .FirstOrDefaultAsync(cancellationToken);
         return ultima is null ? (0m, null) : (ultima.SaldoTotal, ultima.Id);
     }
+
+    private static decimal? Declarado(decimal? valor) => valor is { } v ? CalculadoraLiquidacion.Redondear(v) : null;
+
+    private static bool Difiere(decimal? declarado, decimal calculado) =>
+        declarado is { } d && CalculadoraLiquidacion.Redondear(d) != calculado;
 
     /// <summary>"$63.500 a favor de la empresa": positivo = a favor del conductor.</summary>
     private static string DescribirSaldo(decimal saldo)
@@ -365,6 +380,11 @@ public class PlanillasController : ControllerBase
         SaldoViaje: p.SaldoViaje,
         SaldoAnterior: p.SaldoAnterior,
         SaldoTotal: p.SaldoTotal,
+        TotalGastosDeclarado: p.TotalGastosDeclarado,
+        SaldoViajeDeclarado: p.SaldoViajeDeclarado,
+        SaldoAnteriorDeclarado: p.SaldoAnteriorDeclarado,
+        SaldoNuevoDeclarado: p.SaldoNuevoDeclarado,
+        TieneDiferencias: p.TieneDiferencias,
         EstadoRevision: p.EstadoRevision.ToString(),
         CreadoEn: p.CreadoEn,
         ActualizadoEn: p.ActualizadoEn,
@@ -375,7 +395,9 @@ public class PlanillasController : ControllerBase
             Concepto: g.Concepto,
             ConceptoCanonico: g.ConceptoCanonico,
             Valor: g.Valor,
-            Orden: g.Orden
+            Orden: g.Orden,
+            Etiqueta: g.Etiqueta,
+            Descripcion: g.Descripcion
         )).ToList()
     );
 }

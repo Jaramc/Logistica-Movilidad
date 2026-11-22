@@ -18,6 +18,12 @@ public class GastoDetalle
     /// </summary>
     public string ConceptoCanonico { get; set; } = "OTROS";
 
+    /// <summary>Renglón impreso de la planilla ("PEAJES"); null en filas libres o en gastos digitados.</summary>
+    public string? Etiqueta { get; set; }
+
+    /// <summary>Nota escrita a mano en la fila ("2 codos vigias").</summary>
+    public string? Descripcion { get; set; }
+
     /// <summary>
     /// Importe económico en COP con precisión de dos decimales.
     /// </summary>

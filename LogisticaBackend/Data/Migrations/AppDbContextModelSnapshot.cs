@@ -45,6 +45,16 @@ namespace LogisticaBackend.Data.Migrations
                         .HasDefaultValue("OTROS")
                         .HasColumnName("concepto_canonico");
 
+                    b.Property<string>("Descripcion")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("descripcion");
+
+                    b.Property<string>("Etiqueta")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("etiqueta");
+
                     b.Property<int>("Orden")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -70,7 +80,12 @@ namespace LogisticaBackend.Data.Migrations
                     b.HasIndex("PlanillaViajeId")
                         .HasDatabaseName("ix_gastos_detalle_planilla_viaje_id");
 
-                    b.ToTable("gastos_detalle", (string)null);
+                    b.ToTable("gastos_detalle", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_gastos_detalle_categoria_valida", "concepto_canonico IN ('PEAJES', 'PORCENTAJE', 'COMISION', 'PARQUEO', 'ACPM', 'ENGRASE', 'TENSIONADA', 'ASEO', 'LLANTAS', 'UREA', 'CARGUE', 'DESCARGUE', 'CARROSADA', 'DESCARROSADA', 'PAPELERIA', 'OTROS')");
+
+                            t.HasCheckConstraint("ck_gastos_detalle_valor_no_negativo", "valor >= 0");
+                        });
                 });
 
             modelBuilder.Entity("LogisticaBackend.Domain.Entities.PlanillaViaje", b =>
@@ -173,6 +188,16 @@ namespace LogisticaBackend.Data.Migrations
                         .HasDefaultValue(0m)
                         .HasColumnName("saldo_anterior");
 
+                    b.Property<decimal?>("SaldoAnteriorDeclarado")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("saldo_anterior_declarado");
+
+                    b.Property<decimal?>("SaldoNuevoDeclarado")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("saldo_nuevo_declarado");
+
                     b.Property<decimal>("SaldoTotal")
                         .ValueGeneratedOnAdd()
                         .HasPrecision(14, 2)
@@ -187,12 +212,28 @@ namespace LogisticaBackend.Data.Migrations
                         .HasDefaultValue(0m)
                         .HasColumnName("saldo_viaje");
 
+                    b.Property<decimal?>("SaldoViajeDeclarado")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("saldo_viaje_declarado");
+
+                    b.Property<bool>("TieneDiferencias")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("tiene_diferencias");
+
                     b.Property<decimal>("TotalGastos")
                         .ValueGeneratedOnAdd()
                         .HasPrecision(14, 2)
                         .HasColumnType("numeric(14,2)")
                         .HasDefaultValue(0m)
                         .HasColumnName("total_gastos");
+
+                    b.Property<decimal?>("TotalGastosDeclarado")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("total_gastos_declarado");
 
                     b.Property<uint>("Version")
                         .IsConcurrencyToken()
@@ -215,7 +256,14 @@ namespace LogisticaBackend.Data.Migrations
 
                     b.HasIndex("RevisadoPorUsuarioId");
 
-                    b.ToTable("planillas_viaje", (string)null);
+                    b.ToTable("planillas_viaje", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_planillas_viaje_empresa_con_letras", "empresa_transportadora IS NULL OR empresa_transportadora ~ '[[:alpha:]].*[[:alpha:]]'");
+
+                            t.HasCheckConstraint("ck_planillas_viaje_fechas_en_orden", "fecha_final >= fecha_inicial");
+
+                            t.HasCheckConstraint("ck_planillas_viaje_placa_formato", "placa ~ '^[A-Z]{3}[0-9]{3}$'");
+                        });
                 });
 
             modelBuilder.Entity("LogisticaBackend.Domain.Entities.RegistroAuditoria", b =>

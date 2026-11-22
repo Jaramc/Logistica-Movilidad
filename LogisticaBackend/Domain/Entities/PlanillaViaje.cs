@@ -23,6 +23,15 @@ public class PlanillaViaje
     public decimal SaldoAnterior { get; set; }
     public decimal SaldoTotal { get; set; }
 
+    // Valores escritos en papel (con signo: positivo = la empresa le debe al conductor). Solo auditoría.
+    public decimal? TotalGastosDeclarado { get; set; }
+    public decimal? SaldoViajeDeclarado { get; set; }
+    public decimal? SaldoAnteriorDeclarado { get; set; }
+    public decimal? SaldoNuevoDeclarado { get; set; }
+
+    /// <summary>True si algún valor escrito en papel difiere del calculado (se resalta en el Excel).</summary>
+    public bool TieneDiferencias { get; set; }
+
     // Control y Auditoría
     public EstadoRevision EstadoRevision { get; set; } = EstadoRevision.Aprobado;
     public string? JsonOcrCrudo { get; set; }

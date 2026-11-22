@@ -173,6 +173,58 @@ public class PlanillasIntegracionTests
         }
     }
 
+    [Theory]
+    [InlineData("empresa_transportadora", "'123'", "ck_planillas_viaje_empresa_con_letras")]
+    [InlineData("placa", "'stw 514'", "ck_planillas_viaje_placa_formato")]
+    [InlineData("fecha_final", "'2026-06-01'", "ck_planillas_viaje_fechas_en_orden")]
+    public async Task BaseDeDatos_RechazaConCheckUnInsertDirectoConBasura(string columna, string valor, string restriccion)
+    {
+        // Aunque alguien salte la API, PostgreSQL no acepta la fila.
+        var columnas = new Dictionary<string, string>
+        {
+            ["fecha_inicial"] = "'2026-06-13'", ["fecha_final"] = "'2026-06-19'", ["placa"] = "'STW514'",
+            ["conductor"] = "'CHECK'", ["estado_revision"] = "'Aprobado'", ["empresa_transportadora"] = "'Cliente Ejemplo'",
+        };
+        columnas[columna] = valor;
+        var sql = $"INSERT INTO planillas_viaje ({string.Join(", ", columnas.Keys)}) VALUES ({string.Join(", ", columnas.Values)})";
+
+        var error = await Should.ThrowAsync<Npgsql.PostgresException>(() => Sembrador.EnScopeAsync(_fabrica, sp =>
+            sp.GetRequiredService<AppDbContext>().Database.ExecuteSqlRawAsync(sql)));
+
+        error.SqlState.ShouldBe(Npgsql.PostgresErrorCodes.CheckViolation);
+        error.ConstraintName.ShouldBe(restriccion);
+    }
+
+    [Fact]
+    public async Task Guardar_ConValoresDeclarados_LosPersisteYMarcaDiferencias()
+    {
+        var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
+        using (cliente)
+        {
+            var conductor = "DECLARADOS " + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+            var r = await cliente.PostAsync("/api/planillas", new
+            {
+                placa = "STW514", conductor, origen = "Buenaventura", destino = "Medellin", fechaInicial = "2026-06-13", fechaFinal = "2026-06-19",
+                empresaTransportadora = "Cliente Ejemplo", flete = 6_976_800m, anticipo = 2_800_000m,
+                gastos = new[]
+                {
+                    new { concepto = "COMISION", valor = 30_000m, etiqueta = "COMISION", descripcion = "2 codos vigias", categoria = "COMISION" },
+                    new { concepto = "PEAJES", valor = 2_789_200m, etiqueta = "PEAJES", descripcion = (string?)null, categoria = "PEAJES" },
+                },
+                totalGastosDeclarado = 2_869_200m, saldoViajeDeclarado = 69_200m, saldoAnteriorDeclarado = 0m, saldoNuevoDeclarado = 69_200m,
+            });
+            r.StatusCode.ShouldBe(HttpStatusCode.Created, await r.Content.ReadAsStringAsync());
+            var data = (await r.JsonAsync()).GetProperty("data");
+
+            data.GetProperty("totalGastos").GetDecimal().ShouldBe(2_819_200m);
+            data.GetProperty("totalGastosDeclarado").GetDecimal().ShouldBe(2_869_200m);
+            data.GetProperty("saldoViajeDeclarado").GetDecimal().ShouldBe(69_200m);
+            data.GetProperty("tieneDiferencias").GetBoolean().ShouldBeTrue();
+            data.GetProperty("gastos")[0].GetProperty("etiqueta").GetString().ShouldBe("COMISION");
+            data.GetProperty("gastos")[0].GetProperty("descripcion").GetString().ShouldBe("2 codos vigias");
+        }
+    }
+
     [Fact]
     public async Task Guardar_ValidaPlacaFechasYTopesEnElServidor()
     {

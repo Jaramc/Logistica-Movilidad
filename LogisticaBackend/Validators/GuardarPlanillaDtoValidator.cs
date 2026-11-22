@@ -37,7 +37,9 @@ public class GuardarPlanillaDtoValidator : AbstractValidator<GuardarPlanillaDto>
             .MaximumLength(50).WithMessage("El manifiesto no puede exceder 50 caracteres.");
 
         RuleFor(x => x.EmpresaTransportadora)
-            .MaximumLength(150).WithMessage("La empresa transportadora no puede exceder 150 caracteres.");
+            .MaximumLength(150).WithMessage("La empresa transportadora no puede exceder 150 caracteres.")
+            .Must(e => string.IsNullOrWhiteSpace(e) || TextoPlanilla.ContarLetras(e) >= 2)
+            .WithMessage("La empresa debe tener letras.");
 
         RuleFor(x => x.FechaInicial)
             .Must(f => f <= FechaNegocio.Hoy(reloj)).WithMessage("La fecha inicial no puede ser futura.");
@@ -64,6 +66,8 @@ public class GuardarPlanillaDtoValidator : AbstractValidator<GuardarPlanillaDto>
 
         RuleFor(x => x.Gastos)
             .NotNull().WithMessage("La lista de gastos es obligatoria.")
+            .Must(g => g is null || g.Count >= 1)
+            .WithMessage("La planilla debe tener al menos un renglón de gasto.")
             .Must(g => g is null || g.Count <= maxRenglones)
             .WithMessage($"Una planilla admite máximo {maxRenglones} renglones de gasto.");
 
@@ -77,7 +81,15 @@ public class GuardarPlanillaDtoValidator : AbstractValidator<GuardarPlanillaDto>
                     var c = concepto?.Trim().ToUpperInvariant() ?? string.Empty;
                     return !c.Contains("FLETE") && !c.Contains("ANTICIPO");
                 })
-                .WithMessage("No se permite incluir 'FLETE' o 'ANTICIPO' como renglones de gasto (deben registrarse exclusivamente en sus campos dedicados).");
+                .WithMessage("No se permite incluir 'FLETE' o 'ANTICIPO' como renglones de gasto (deben registrarse exclusivamente en sus campos dedicados).")
+                .Must(concepto => !ListaNegraConceptos.Coincide(concepto))
+                .WithMessage(g => $"«{g.Concepto}» es un dato de cabecera o de saldos (empresa, fechas, placa, total, saldo...), no un gasto.");
+            gasto.RuleFor(g => g.Etiqueta)
+                .Must(e => !ListaNegraConceptos.Coincide(e))
+                .WithMessage(g => $"«{g.Etiqueta}» es un dato de cabecera o de saldos, no un gasto.");
+            gasto.RuleFor(g => g.Descripcion)
+                .Must(d => !ListaNegraConceptos.Coincide(d))
+                .WithMessage(g => $"«{g.Descripcion}» es un dato de cabecera o de saldos, no un gasto.");
 
             gasto.RuleFor(g => g.Categoria)
                 .Must(c => ConceptoNormalizer.CategoriasCanonicas.Contains(c!.Trim().ToUpperInvariant()))

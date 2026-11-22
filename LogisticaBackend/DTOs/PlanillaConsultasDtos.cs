@@ -19,6 +19,11 @@ public record PlanillaDetalleDto(
     decimal SaldoViaje,
     decimal SaldoAnterior,
     decimal SaldoTotal,
+    decimal? TotalGastosDeclarado,
+    decimal? SaldoViajeDeclarado,
+    decimal? SaldoAnteriorDeclarado,
+    decimal? SaldoNuevoDeclarado,
+    bool TieneDiferencias,
     string EstadoRevision,
     DateTime CreadoEn,
     DateTime ActualizadoEn,
@@ -32,7 +37,9 @@ public record GastoDetalleRespuestaDto(
     string Concepto,
     string ConceptoCanonico,
     decimal Valor,
-    int Orden
+    int Orden,
+    string? Etiqueta = null,
+    string? Descripcion = null
 );
 
 /// <summary>

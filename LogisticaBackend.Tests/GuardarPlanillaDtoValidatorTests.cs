@@ -31,6 +31,54 @@ public class GuardarPlanillaDtoValidatorTests
         EmpresaTransportadora: "LOGISTICA S.A.S."
     );
 
+    [Theory]
+    [InlineData("TOTAL GASTOS")]
+    [InlineData("Saldo anterior")]
+    [InlineData("EMPRESA TRANSPORTADORA")]
+    [InlineData("FECHA INICIO")]
+    [InlineData("PLACA")]
+    [InlineData("N° Manifiesto")]
+    public void Validar_GastoConDatoDeCabeceraOSaldo_EsRechazado(string concepto)
+    {
+        var dto = CrearDtoValido() with { Gastos = new List<GastoItemDto> { new(concepto, 63_500m) } };
+        _validator.Validate(dto).Errors.ShouldContain(e => e.ErrorMessage.Contains("no un gasto"));
+
+        var comoDescripcion = CrearDtoValido() with { Gastos = new List<GastoItemDto> { new("OTROS", 1_000m, "OTROS", concepto) } };
+        _validator.Validate(comoDescripcion).Errors.ShouldContain(e => e.PropertyName.EndsWith("Descripcion"));
+    }
+
+    [Theory]
+    [InlineData("Pago bodegaje contenedor")]
+    [InlineData("2 codos vigias")]
+    [InlineData("Retirada contenedor TKS")]
+    public void Validar_GastoLegitimo_NoChocaConLaListaNegra(string descripcion)
+    {
+        var dto = CrearDtoValido() with { Gastos = new List<GastoItemDto> { new("COMISION", 30_000m, "COMISION", descripcion, "COMISION") } };
+        _validator.Validate(dto).IsValid.ShouldBeTrue();
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(61)]
+    public void Validar_CantidadDeGastosFueraDe1a60_EsRechazada(int cantidad)
+    {
+        var dto = CrearDtoValido() with { Gastos = Enumerable.Range(1, cantidad).Select(_ => new GastoItemDto("PEAJES", 1_000m)).ToList() };
+        _validator.Validate(dto).Errors.ShouldContain(e => e.PropertyName == "Gastos");
+    }
+
+    [Theory]
+    [InlineData("0", false)]
+    [InlineData("123", false)]
+    [InlineData("$ -", false)]
+    [InlineData("JR", true)]
+    [InlineData("Cliente Ejemplo", true)]
+    [InlineData(null, true)]
+    public void Validar_EmpresaDebeTenerLetras(string? empresa, bool valida)
+    {
+        var dto = CrearDtoValido() with { EmpresaTransportadora = empresa };
+        _validator.Validate(dto).Errors.Any(e => e.PropertyName == "EmpresaTransportadora").ShouldBe(!valida);
+    }
+
     [Fact]
     public void Validar_DtoCorrecto_PasaSinErrores()
     {
