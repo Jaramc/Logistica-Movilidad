@@ -29,10 +29,16 @@ public record GuardarPlanillaDto(
     decimal? SaldoNuevoDeclarado = null
 );
 
-/// <summary>Renglón de gasto enviado por el formulario.</summary>
+/// <summary>
+/// Renglón de gasto enviado por el formulario. Etiqueta = renglón impreso ("PEAJES"), Descripcion =
+/// nota escrita a mano, Categoria = una de las 16 elegida en la UI (si falta, se deduce del concepto).
+/// </summary>
 public record GastoItemDto(
     string Concepto,
-    decimal Valor
+    decimal Valor,
+    string? Etiqueta = null,
+    string? Descripcion = null,
+    string? Categoria = null
 );
 
 /// <summary>

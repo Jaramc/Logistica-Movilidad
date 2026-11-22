@@ -153,7 +153,10 @@ public class PlanillasController : ControllerBase
             Gastos = dto.Gastos.Select((g, idx) => new GastoDetalle
             {
                 Concepto = g.Concepto.Trim(),
-                ConceptoCanonico = ConceptoNormalizer.Normalizar(g.Concepto),
+                // La categoría elegida por el revisor manda; el validador ya garantizó que es una de las 16.
+                ConceptoCanonico = string.IsNullOrWhiteSpace(g.Categoria)
+                    ? ConceptoNormalizer.Normalizar(g.Concepto)
+                    : g.Categoria.Trim().ToUpperInvariant(),
                 Valor = CalculadoraLiquidacion.Redondear(g.Valor),
                 Orden = idx + 1
             }).ToList()

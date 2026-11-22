@@ -150,6 +150,30 @@ public class PlanillasIntegracionTests
     }
 
     [Fact]
+    public async Task Guardar_UsaLaCategoriaElegidaEnLaUi_YRechazaCategoriasDesconocidas()
+    {
+        var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
+        using (cliente)
+        {
+            var conductor = "CATEGORIA " + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+            object Con(object gasto) => new
+            {
+                placa = "STW514", conductor, origen = "Buenaventura", destino = "Medellin", fechaInicial = "2026-06-13", fechaFinal = "2026-06-19",
+                flete = 0m, anticipo = 0m, gastos = new[] { gasto },
+            };
+
+            // "liga CDA" no tiene palabras clave: sin categoría sería OTROS; el revisor eligió ACPM.
+            var r = await cliente.PostAsync("/api/planillas", Con(new { concepto = "ACPM / COMBUSTIBLE", valor = 50_000m, etiqueta = "ACPM / COMBUSTIBLE", descripcion = "liga CDA", categoria = "acpm" }));
+            r.StatusCode.ShouldBe(HttpStatusCode.Created, await r.Content.ReadAsStringAsync());
+            (await r.JsonAsync()).GetProperty("data").GetProperty("gastos")[0].GetProperty("conceptoCanonico").GetString().ShouldBe("ACPM");
+
+            var invalida = await cliente.PostAsync("/api/planillas", Con(new { concepto = "Repuesto", valor = 10_000m, categoria = "GASOLINA" }));
+            invalida.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+            (await invalida.Content.ReadAsStringAsync()).ShouldContain("16 del consolidado");
+        }
+    }
+
+    [Fact]
     public async Task Guardar_ValidaPlacaFechasYTopesEnElServidor()
     {
         var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);

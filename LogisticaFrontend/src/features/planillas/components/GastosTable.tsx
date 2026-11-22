@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { type Control, useFieldArray, Controller } from 'react-hook-form';
-import type { PlanillaFormData } from '../schemas/planillaSchema';
+import { CATEGORIAS_GASTO, type PlanillaFormData } from '../schemas/planillaSchema';
 import { MoneyInput } from '../../../components/ui/MoneyInput';
 import { Button } from '../../../components/ui/Button';
 import { Plus, Trash2, Receipt, Calculator } from 'lucide-react';
@@ -9,6 +9,18 @@ export interface GastosTableProps {
   control: Control<PlanillaFormData>;
 }
 
+/** Nombre legible de la categoría en el selector. */
+const NOMBRE_CATEGORIA: Record<(typeof CATEGORIAS_GASTO)[number], string> = {
+  PEAJES: 'Peajes', PORCENTAJE: 'Porcentaje', COMISION: 'Comisión', PARQUEO: 'Parqueo', ACPM: 'ACPM',
+  ENGRASE: 'Engrase', TENSIONADA: 'Tensionada', ASEO: 'Aseo', LLANTAS: 'Llantas', UREA: 'Urea',
+  CARGUE: 'Cargue', DESCARGUE: 'Descargue', CARROSADA: 'Carrosada', DESCARROSADA: 'Descarrosada',
+  PAPELERIA: 'Papelería', OTROS: 'Otros',
+};
+
+/**
+ * Grilla de rubros: solo gastos. La cabecera (empresa, fechas, placa, flete...) y los saldos
+ * van en sus propios bloques; nunca aquí.
+ */
 export const GastosTable: React.FC<GastosTableProps> = ({ control }) => {
   const { fields, append, remove } = useFieldArray({
     control,
@@ -19,20 +31,15 @@ export const GastosTable: React.FC<GastosTableProps> = ({ control }) => {
   const lastAddedInputRef = useRef<HTMLInputElement>(null);
 
   const agregarNuevoGasto = () => {
-    const nuevoId = typeof crypto !== 'undefined' && crypto.randomUUID 
-      ? crypto.randomUUID() 
+    const nuevoId = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
       : `gasto_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
-    append({
-      id: nuevoId,
-      concepto: `Gasto #${fields.length + 1}`,
-      valor: 0,
-    });
+    append({ id: nuevoId, etiqueta: '', descripcion: '', categoria: 'OTROS', valor: 0 });
 
     // Foco automático en el nuevo rubro para agilidad del digitador
     setTimeout(() => {
       lastAddedInputRef.current?.focus();
-      lastAddedInputRef.current?.select();
     }, 50);
   };
 
@@ -46,7 +53,7 @@ export const GastosTable: React.FC<GastosTableProps> = ({ control }) => {
           </h4>
           <p className="text-xs text-slate-500 mt-0.5">
             {fields.length > 0
-              ? `${fields.length} rubros detectados. Puedes editar conceptos, montos o agregar nuevos.`
+              ? `${fields.length} rubros detectados. Revisa la descripción, el valor y la categoría de cada uno.`
               : 'No hay gastos registrados en esta planilla.'}
           </p>
         </div>
@@ -83,38 +90,56 @@ export const GastosTable: React.FC<GastosTableProps> = ({ control }) => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
           {fields.map((field, index) => {
             const isLast = index === fields.length - 1;
+            const nombre = field.etiqueta || field.descripcion || `rubro ${index + 1}`;
             return (
               <div
                 key={field.id} // CLAVE ESTABLE UUID (Soluciona bug de renderizado y foco)
-                className="bg-slate-50/90 p-3.5 rounded-xl border border-slate-200/80 hover:border-blue-300 hover:bg-white transition-all shadow-2xs group focus-within:border-blue-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-100"
+                data-testid="tarjeta-gasto"
+                className="bg-slate-50/90 p-3.5 rounded-xl border border-slate-200/80 hover:border-blue-300 hover:bg-white transition-all shadow-2xs group focus-within:border-blue-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-100 space-y-2"
               >
-                <div className="flex items-center justify-between mb-2">
-                  <Controller
-                    control={control}
-                    name={`detalleGastos.${index}.concepto`}
-                    render={({ field: conceptoField }) => (
-                      <input
-                        ref={isLast ? lastAddedInputRef : undefined}
-                        type="text"
-                        placeholder="Nombre del gasto"
-                        value={conceptoField.value}
-                        onChange={conceptoField.onChange}
-                        className="text-xs font-bold text-slate-800 uppercase tracking-wide bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-500 focus:outline-none w-full mr-2 py-0.5 transition-colors"
-                        aria-label={`Concepto del gasto ${index + 1}`}
-                      />
-                    )}
-                  />
+                <div className="flex items-center justify-between">
+                  <span
+                    className={`text-[11px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-md ${
+                      field.etiqueta ? 'bg-blue-50 text-blue-800 border border-blue-100' : 'bg-slate-100 text-slate-500 border border-slate-200'
+                    }`}
+                    data-testid="etiqueta-gasto"
+                  >
+                    {field.etiqueta || 'Libre'}
+                  </span>
 
                   <button
                     type="button"
                     onClick={() => remove(index)}
                     className="text-slate-300 hover:text-rose-600 p-1.5 rounded-lg transition-colors cursor-pointer opacity-70 group-hover:opacity-100 hover:bg-rose-50"
-                    title={`Eliminar rubro ${field.concepto || index + 1}`}
-                    aria-label={`Eliminar rubro ${field.concepto || index + 1}`}
+                    title={`Eliminar rubro ${nombre}`}
+                    aria-label={`Eliminar rubro ${nombre}`}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
+
+                <Controller
+                  control={control}
+                  name={`detalleGastos.${index}.descripcion`}
+                  render={({ field: descripcionField, fieldState }) => (
+                    <div>
+                      <input
+                        ref={isLast ? lastAddedInputRef : undefined}
+                        type="text"
+                        placeholder={field.etiqueta ? 'Nota escrita a mano (opcional)' : 'Descripción del gasto'}
+                        value={descripcionField.value}
+                        onChange={descripcionField.onChange}
+                        onBlur={descripcionField.onBlur}
+                        className="text-xs text-slate-800 bg-transparent border-b border-slate-200 hover:border-slate-300 focus:border-blue-500 focus:outline-none w-full py-0.5 transition-colors"
+                        aria-label={`Descripción del gasto ${index + 1}`}
+                        aria-invalid={!!fieldState.error}
+                      />
+                      {fieldState.error && (
+                        <p className="text-[11px] text-rose-600 mt-0.5" role="alert">{fieldState.error.message}</p>
+                      )}
+                    </div>
+                  )}
+                />
 
                 <Controller
                   control={control}
@@ -124,8 +149,26 @@ export const GastosTable: React.FC<GastosTableProps> = ({ control }) => {
                       value={valorField.value}
                       onChange={valorField.onChange}
                       error={fieldState.error?.message}
-                      aria-label={`Valor del gasto ${field.concepto || index + 1}`}
+                      aria-label={`Valor del gasto ${nombre}`}
                     />
+                  )}
+                />
+
+                <Controller
+                  control={control}
+                  name={`detalleGastos.${index}.categoria`}
+                  render={({ field: categoriaField }) => (
+                    <select
+                      value={categoriaField.value}
+                      onChange={categoriaField.onChange}
+                      onBlur={categoriaField.onBlur}
+                      className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:border-blue-500 focus:outline-none"
+                      aria-label={`Categoría del gasto ${nombre}`}
+                    >
+                      {CATEGORIAS_GASTO.map((c) => (
+                        <option key={c} value={c}>{NOMBRE_CATEGORIA[c]}</option>
+                      ))}
+                    </select>
                   )}
                 />
               </div>

@@ -5,9 +5,13 @@ import {
   PlanillaFormSchema,
   type PlanillaFormData,
   type GuardarPlanillaDto,
-  type SaldoDeclarado
+  type SaldoDeclarado,
+  conceptoDeGasto,
+  normalizarPlaca
 } from '../features/planillas/schemas/planillaSchema';
-import { calcularLiquidacionEconomica, describirSaldo, toApiDecimalNumber } from '../features/planillas/utils/money';
+import { calcularLiquidacionEconomica, describirSaldo, formatCOP, toApiDecimalNumber } from '../features/planillas/utils/money';
+import { SaldosDeclarados as BloqueSaldosDeclarados } from '../features/planillas/components/SaldosDeclarados';
+import Big from 'big.js';
 import { useSaldoAnterior } from '../features/planillas/hooks/useSaldoAnterior';
 import { hoyLocalISO } from '../lib/fechas';
 import { usePlanillaExtraccion } from '../features/planillas/hooks/usePlanillaExtraccion';
@@ -42,6 +46,8 @@ export default function ProcesadorLiquidaciones() {
   const [camposNoEncontrados, setCamposNoEncontrados] = useState<string[]>([]);
   const [confianzaPromedio, setConfianzaPromedio] = useState<number | null>(null);
   const [declarados, setDeclarados] = useState<SaldosDeclarados | null>(null);
+  const [advertenciasOcr, setAdvertenciasOcr] = useState<string[]>([]);
+  const [revisoDiferencias, setRevisoDiferencias] = useState(false);
 
   const reviewHeadingRef = useRef<HTMLHeadingElement>(null);
 
@@ -98,6 +104,12 @@ export default function ProcesadorLiquidaciones() {
     );
   }, [fleteVal, anticipoVal, gastosVal, saldoAnteriorVal]);
 
+  // Diferencia viva entre la suma de los rubros y el total escrito en papel: exige confirmación.
+  const diferenciaTotal =
+    declarados?.totalGastos != null ? new Big(declarados.totalGastos).minus(calculo.totalGastos) : new Big(0);
+  const hayDiferenciaTotal = !diferenciaTotal.eq(0);
+  const bloqueadoPorDiferencias = hayDiferenciaTotal && !revisoDiferencias;
+
   // Protección against datos sin guardar (beforeunload)
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -125,6 +137,7 @@ export default function ProcesadorLiquidaciones() {
         setJsonOcrCrudo(data.jsonOcrCrudo);
         setCamposNoEncontrados(data.camposNoEncontrados);
         setConfianzaPromedio(data.confianzaPromedio);
+        setAdvertenciasOcr(data.advertencias);
         setDeclarados({
           totalGastos: data.totalGastosDeclarado,
           saldoViaje: data.saldoViajeDeclarado,
@@ -134,19 +147,22 @@ export default function ProcesadorLiquidaciones() {
 
         resetForm({
           placa: data.placa || '',
-          conductor: form.getValues('conductor') || '',
+          conductor: data.conductor || form.getValues('conductor') || '',
           origen: data.origen || '',
           destino: data.destino || '',
-          fechaInicial: form.getValues('fechaInicial'),
-          fechaFinal: form.getValues('fechaFinal'),
-          manifiesto: '',
-          empresaTransportadora: '',
+          fechaInicial: data.fechaInicial ?? form.getValues('fechaInicial'),
+          fechaFinal: data.fechaFinal ?? form.getValues('fechaFinal'),
+          manifiesto: data.manifiesto,
+          empresaTransportadora: data.empresaTransportadora,
           flete: data.flete || 0,
           anticipo: data.anticipo || 0,
           saldoAnterior: 0,
           detalleGastos: (data.detalleGastos || []).map((g, idx) => ({
             id: `ocr_${idx}_${Date.now()}`,
-            concepto: g.concepto || `Gasto #${idx + 1}`,
+            // Filas del OCR sin etiqueta impresa: el texto leído queda como descripción editable.
+            etiqueta: g.etiqueta,
+            descripcion: g.descripcion || (g.etiqueta ? '' : g.concepto),
+            categoria: g.categoriaPropuesta,
             valor: g.valor || 0,
           })),
         });
@@ -162,7 +178,7 @@ export default function ProcesadorLiquidaciones() {
   // Guardar en Base de Datos (Mapeo estricto con DTO Whitelist)
   const onGuardarAprobado = async (data: PlanillaFormData) => {
     const payload: GuardarPlanillaDto = {
-      placa: data.placa,
+      placa: normalizarPlaca(data.placa),
       conductor: data.conductor,
       origen: data.origen,
       destino: data.destino,
@@ -173,8 +189,11 @@ export default function ProcesadorLiquidaciones() {
       flete: toApiDecimalNumber(data.flete),
       anticipo: toApiDecimalNumber(data.anticipo),
       gastos: (data.detalleGastos || []).map((g) => ({
-        concepto: g.concepto,
+        concepto: conceptoDeGasto(g),
         valor: toApiDecimalNumber(g.valor),
+        etiqueta: g.etiqueta.trim() || null,
+        descripcion: g.descripcion.trim() || null,
+        categoria: g.categoria,
       })),
       jsonOcrCrudo,
       totalGastosDeclarado: declarados?.totalGastos ?? null,
@@ -196,6 +215,8 @@ export default function ProcesadorLiquidaciones() {
     setCamposNoEncontrados([]);
     setConfianzaPromedio(null);
     setDeclarados(null);
+    setAdvertenciasOcr([]);
+    setRevisoDiferencias(false);
   };
 
   const reiniciarProceso = () => {
@@ -245,6 +266,17 @@ export default function ProcesadorLiquidaciones() {
             calculo={calculo}
             cantidadGastos={gastosVal.length}
             saldoAnterior={saldoAnteriorVal}
+          />
+        )}
+
+        {declarados && (estado === 'revisando' || estado === 'guardado') && (
+          <BloqueSaldosDeclarados
+            totalGastos={declarados.totalGastos}
+            saldoViaje={declarados.saldoViaje}
+            saldoAnterior={declarados.saldoAnterior}
+            saldoNuevo={declarados.saldoNuevo}
+            calculo={calculo}
+            saldoAnteriorServidor={saldoAnteriorServidor}
           />
         )}
       </div>
@@ -373,6 +405,31 @@ export default function ProcesadorLiquidaciones() {
               {tabActiva === 'viaje' && <DatosViajeForm form={form} camposNoEncontrados={camposNoEncontrados} />}
             </div>
 
+            {/* Advertencias del OCR y diferencias por revisar antes de aprobar */}
+            {estado !== 'guardado' && (advertenciasOcr.length > 0 || hayDiferenciaTotal) && (
+              <div className="px-5 py-3 border-t border-amber-200 bg-amber-50 text-amber-900 text-xs space-y-2" data-testid="advertencias-revision">
+                {advertenciasOcr.length > 0 && (
+                  <ul className="list-disc pl-4 space-y-0.5">
+                    {advertenciasOcr.map((a) => <li key={a}>{a}</li>)}
+                  </ul>
+                )}
+                {hayDiferenciaTotal && (
+                  <label className="flex items-start gap-2 font-semibold cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={revisoDiferencias}
+                      onChange={(e) => setRevisoDiferencias(e.target.checked)}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      Revisé las diferencias: la suma de los rubros ({formatCOP(calculo.totalGastos)}) no coincide con el
+                      total escrito ({formatCOP(declarados!.totalGastos!)}); diferencia {formatCOP(diferenciaTotal.abs())}.
+                    </span>
+                  </label>
+                )}
+              </div>
+            )}
+
             {/* Footer de Acciones y Guardado Seguro */}
             <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
@@ -385,7 +442,8 @@ export default function ProcesadorLiquidaciones() {
                 variant="success"
                 isLoading={estaGuardando}
                 loadingText="Guardando en base de datos..."
-                disabled={estado === 'guardado'}
+                disabled={estado === 'guardado' || bloqueadoPorDiferencias}
+                title={bloqueadoPorDiferencias ? 'Marca "Revisé las diferencias" para aprobar' : undefined}
                 leftIcon={<CheckCircle2 className="w-4 h-4" />}
               >
                 {estado === 'guardado' ? 'Planilla Aprobada' : 'Aprobar y Guardar en BD'}

@@ -36,7 +36,7 @@ export const DatosViajeForm: React.FC<DatosViajeFormProps> = ({ form, camposNoEn
           <Input
             label="Placa del Vehículo"
             required
-            placeholder="Ej. S14 o WCN452"
+            placeholder="Ej. STW514"
             error={errors.placa?.message}
             leftAddon={<Truck className="w-4 h-4" />}
             {...resaltar('Placa', !!errors.placa)}
@@ -82,6 +82,7 @@ export const DatosViajeForm: React.FC<DatosViajeFormProps> = ({ form, camposNoEn
             required
             error={errors.fechaInicial?.message}
             leftAddon={<Calendar className="w-4 h-4" />}
+            {...resaltar('FechaInicial', !!errors.fechaInicial)}
             {...register('fechaInicial')}
           />
 
@@ -91,6 +92,7 @@ export const DatosViajeForm: React.FC<DatosViajeFormProps> = ({ form, camposNoEn
             required
             error={errors.fechaFinal?.message}
             leftAddon={<Calendar className="w-4 h-4" />}
+            {...resaltar('FechaFinal', !!errors.fechaFinal)}
             {...register('fechaFinal')}
           />
 
@@ -105,6 +107,7 @@ export const DatosViajeForm: React.FC<DatosViajeFormProps> = ({ form, camposNoEn
             label="Empresa Transportadora"
             placeholder="Razón social"
             error={errors.empresaTransportadora?.message}
+            {...resaltar('EmpresaTransportadora', !!errors.empresaTransportadora)}
             {...register('empresaTransportadora')}
           />
         </div>

@@ -79,6 +79,13 @@ public class GuardarPlanillaDtoValidator : AbstractValidator<GuardarPlanillaDto>
                 })
                 .WithMessage("No se permite incluir 'FLETE' o 'ANTICIPO' como renglones de gasto (deben registrarse exclusivamente en sus campos dedicados).");
 
+            gasto.RuleFor(g => g.Categoria)
+                .Must(c => ConceptoNormalizer.CategoriasCanonicas.Contains(c!.Trim().ToUpperInvariant()))
+                .When(g => !string.IsNullOrWhiteSpace(g.Categoria))
+                .WithMessage("La categoría debe ser una de las 16 del consolidado.");
+            gasto.RuleFor(g => g.Etiqueta).MaximumLength(60).WithMessage("La etiqueta no puede exceder 60 caracteres.");
+            gasto.RuleFor(g => g.Descripcion).MaximumLength(200).WithMessage("La descripción no puede exceder 200 caracteres.");
+
             gasto.RuleFor(g => g.Valor).InclusiveBetween(0m, tope)
                 .WithMessage($"El valor del gasto debe estar entre 0 y {topeTexto}.");
         });
