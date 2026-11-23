@@ -196,6 +196,50 @@ public class PlanillasIntegracionTests
     }
 
     [Fact]
+    public async Task PlanillaReal01_AprobadaTalComoLaLeeElOcr_GuardaLos17GastosYLosDeclarados()
+    {
+        var ocr = await PlanillaReal01.ProcesarAsync();
+        var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
+        using (cliente)
+        {
+            var conductor = "PEDRO " + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+            var r = await cliente.PostAsync("/api/planillas", new
+            {
+                placa = ocr.Placa, conductor, origen = ocr.Origen, destino = ocr.Destino,
+                fechaInicial = ocr.FechaInicial, fechaFinal = ocr.FechaFinal, manifiesto = ocr.Manifiesto,
+                empresaTransportadora = ocr.EmpresaTransportadora, flete = ocr.Flete, anticipo = ocr.Anticipo,
+                gastos = ocr.DetalleGastos.Select(g => new
+                {
+                    concepto = g.Concepto, valor = g.Valor, etiqueta = g.Etiqueta == "" ? null : g.Etiqueta,
+                    descripcion = g.Descripcion, categoria = g.CategoriaPropuesta,
+                }),
+                jsonOcrCrudo = ocr.JsonOcrCrudo,
+                totalGastosDeclarado = ocr.TotalGastosDeclarado,
+                saldoViajeDeclarado = ocr.SaldoViajeDeclarado?.Valor,
+                saldoAnteriorDeclarado = ocr.SaldoAnteriorDeclarado?.Valor,
+                saldoNuevoDeclarado = ocr.SaldoNuevoDeclarado?.Valor,
+            });
+            r.StatusCode.ShouldBe(HttpStatusCode.Created, await r.Content.ReadAsStringAsync());
+            var id = (await r.JsonAsync()).GetProperty("id").GetInt32();
+
+            var guardada = await Sembrador.EnScopeAsync(_fabrica, sp => sp.GetRequiredService<AppDbContext>().Planillas
+                .AsNoTracking().Include(p => p.Gastos).SingleAsync(p => p.Id == id));
+
+            guardada.Gastos.Count.ShouldBe(17);
+            guardada.TotalGastos.ShouldBe(2_819_200m);
+            guardada.TotalGastosDeclarado.ShouldBe(2_869_200m);
+            guardada.SaldoViajeDeclarado.ShouldBe(69_200m);
+            guardada.SaldoAnteriorDeclarado.ShouldBe(-63_500m);
+            guardada.SaldoNuevoDeclarado.ShouldBe(5_700m);
+            guardada.TieneDiferencias.ShouldBeTrue();
+            guardada.EmpresaTransportadora.ShouldBe("Cliente Ejemplo");
+            guardada.Gastos.Single(g => g.Etiqueta == "COMISION").ShouldSatisfyAllConditions(
+                g => g.Descripcion.ShouldBe("2 codos vigias"), g => g.ConceptoCanonico.ShouldBe("COMISION"));
+            guardada.Gastos.ShouldNotContain(g => LogisticaBackend.Domain.Services.ListaNegraConceptos.Coincide(g.Concepto));
+        }
+    }
+
+    [Fact]
     public async Task Guardar_ConValoresDeclarados_LosPersisteYMarcaDiferencias()
     {
         var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);

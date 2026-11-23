@@ -1,0 +1,1435 @@
+{
+ "_fuente": "Respuesta real de Azure Document Intelligence (modelo planillas-gastos-v1, api-version 2023-07-31, la que usa el SDK) para la planilla Cliente Ejemplo del 13 al 19-06-26, analizada el 2026-11-20. Se conservan solo tables y documents (sin polígonos ni spans).",
+ "apiVersion": "2023-07-31",
+ "modelId": "planillas-gastos-v1",
+ "tables": [
+  {
+   "rowCount": 31,
+   "columnCount": 4,
+   "cells": [
+    {
+     "kind": "content",
+     "rowIndex": 0,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 4,
+     "content": "LOGISTICA Y MOVILIDAD S.A.S NIT 901.577.535-3"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 1,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 1,
+     "columnIndex": 1,
+     "rowSpan": 1,
+     "columnSpan": 3,
+     "content": "PLANILLA DE GASTOS CONDUCTOR"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 2,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "EMPRESA TRANSPORTADORA"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 2,
+     "columnIndex": 1,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "Cliente Ejemplo"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 2,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 2,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 3,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "ORIGEN"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 3,
+     "columnIndex": 1,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "Buenaventura"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 3,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "DESTINO"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 3,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "Medellín"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 4,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "FECHA INICIO"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 4,
+     "columnIndex": 1,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "13-06-26"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 4,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "FECHA FIN"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 4,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "19-06-26"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 5,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "Nº MANIFIESTO"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 5,
+     "columnIndex": 1,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 5,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "FLETE"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 5,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "6'976.800"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 6,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "PLACA"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 6,
+     "columnIndex": 1,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "Siw 514"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 6,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "ANTICIPO"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 6,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "2'800.000"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 7,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 4,
+     "content": "GASTOS"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 8,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "PORCENTAJE"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 8,
+     "columnIndex": 1,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "697.600"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 8,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 8,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 9,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "PARQUEO"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 9,
+     "columnIndex": 1,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "178.000"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 9,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 9,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 10,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "PEAJES"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 10,
+     "columnIndex": 1,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "32.900"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 10,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 10,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 11,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "COMISION 2 codos vigias"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 11,
+     "columnIndex": 1,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "30.000"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 11,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 11,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 12,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "CARGUE"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 12,
+     "columnIndex": 1,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "150.000"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 12,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 12,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 13,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "DESCARGUE"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 13,
+     "columnIndex": 1,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "140 .000"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 13,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 13,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 14,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "ASSO Esparrago y Sacada da"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 14,
+     "columnIndex": 1,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "otro reventado 48.000"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 14,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 14,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 15,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "CARPADA Y DESCARPADA Iniciada"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 15,
+     "columnIndex": 1,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "Baterias 80,000"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 15,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 15,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 16,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "MONTALLANTAS Refrigerante"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 16,
+     "columnIndex": 1,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "76.200"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 16,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 16,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 17,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "ENGRASE Reparada radiador"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 17,
+     "columnIndex": 1,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "416.500"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 17,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 17,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 18,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "ACPM / COMBUSTIBLE liga CDA"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 18,
+     "columnIndex": 1,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "50.000"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 18,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 18,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 19,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "PAPELERIA Y PASAJES Entornado"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 19,
+     "columnIndex": 1,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "Contenedor 31.000"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 19,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 19,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 20,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "BÁSICO Retenedor y diafrain"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 20,
+     "columnIndex": 1,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "109.000"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 20,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 20,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 21,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "OTROS Pago tecnico mecânica"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 21,
+     "columnIndex": 1,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "489.000"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 21,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 21,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 22,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "arreglo y puesta de luces y"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 22,
+     "columnIndex": 1,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "conector 42.000"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 22,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 22,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 23,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "Pago badaggie Contenedor"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 23,
+     "columnIndex": 1,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "130.000"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 23,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 23,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 24,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 3,
+     "content": "OBSERVACIONES"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 24,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 25,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 2,
+     "content": "farola luz siop Cabezota 119.000"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 25,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 25,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 26,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 2,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 26,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 26,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 27,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 3,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 27,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": ""
+    },
+    {
+     "kind": "content",
+     "rowIndex": 28,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 4,
+     "content": "SALDOS"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 29,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "TOTAL GASTOS"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 29,
+     "columnIndex": 1,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "2'869.200"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 29,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "SALDO ANTERIOR"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 29,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "63.500 Empresa"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 30,
+     "columnIndex": 0,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "SALDO VIAJE"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 30,
+     "columnIndex": 1,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "69.200 Pedro"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 30,
+     "columnIndex": 2,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "SALDO NUEVO"
+    },
+    {
+     "kind": "content",
+     "rowIndex": 30,
+     "columnIndex": 3,
+     "rowSpan": 1,
+     "columnSpan": 1,
+     "content": "5.700 Pedro"
+    }
+   ]
+  }
+ ],
+ "documents": [
+  {
+   "docType": "planillas-gastos-v1:planillas-gastos-v1",
+   "confidence": 0.751,
+   "fields": {
+    "DetalleGastos": {
+     "type": "array",
+     "content": null,
+     "confidence": null,
+     "valueArray": [
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "EMPRESA TRANSPORTADORA",
+         "confidence": null,
+         "valueString": "EMPRESA TRANSPORTADORA"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "Cliente Ejemplo",
+         "confidence": null,
+         "valueString": "Cliente Ejemplo"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "ORIGEN",
+         "confidence": null,
+         "valueString": "ORIGEN"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "Buenaventura",
+         "confidence": null,
+         "valueString": "Buenaventura"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "DESTINO",
+         "confidence": null,
+         "valueString": "DESTINO"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "Medellín",
+         "confidence": null,
+         "valueString": "Medellín"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "FECHA INICIO",
+         "confidence": null,
+         "valueString": "FECHA INICIO"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "13-06-26",
+         "confidence": null,
+         "valueString": "13-06-26"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "FECHA FIN",
+         "confidence": null,
+         "valueString": "FECHA FIN"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "19-06-26",
+         "confidence": null,
+         "valueString": "19-06-26"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "FLETE",
+         "confidence": null,
+         "valueString": "FLETE"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "6'976.800",
+         "confidence": null,
+         "valueString": "6'976.800"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "PLACA",
+         "confidence": null,
+         "valueString": "PLACA"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "514",
+         "confidence": null,
+         "valueString": "514"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "ANTICIPO",
+         "confidence": null,
+         "valueString": "ANTICIPO"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "2'800.000",
+         "confidence": null,
+         "valueString": "2'800.000"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "PORCENTAJE",
+         "confidence": null,
+         "valueString": "PORCENTAJE"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "697.600",
+         "confidence": null,
+         "valueString": "697.600"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "PARQUEO",
+         "confidence": null,
+         "valueString": "PARQUEO"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "178.000",
+         "confidence": null,
+         "valueString": "178.000"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "2 codos vigias",
+         "confidence": null,
+         "valueString": "2 codos vigias"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "30.000",
+         "confidence": null,
+         "valueString": "30.000"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": null,
+         "confidence": null,
+         "valueString": null
+        },
+        "Valor": {
+         "type": "string",
+         "content": "32.900",
+         "confidence": null,
+         "valueString": "32.900"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "CARGUE",
+         "confidence": null,
+         "valueString": "CARGUE"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "150.000",
+         "confidence": null,
+         "valueString": "150.000"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "DESCARGUE",
+         "confidence": null,
+         "valueString": "DESCARGUE"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "140 .000",
+         "confidence": null,
+         "valueString": "140 .000"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "Esparrago y Sacada da\notro reventado",
+         "confidence": null,
+         "valueString": "Esparrago y Sacada da otro reventado"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "48.000",
+         "confidence": null,
+         "valueString": "48.000"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "Iniciada\nBaterias",
+         "confidence": null,
+         "valueString": "Iniciada Baterias"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "80,000",
+         "confidence": null,
+         "valueString": "80,000"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "Refrigerante",
+         "confidence": null,
+         "valueString": "Refrigerante"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "76.200",
+         "confidence": null,
+         "valueString": "76.200"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "Reparada radiador",
+         "confidence": null,
+         "valueString": "Reparada radiador"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "416.500",
+         "confidence": null,
+         "valueString": "416.500"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "liga CDA",
+         "confidence": null,
+         "valueString": "liga CDA"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "50.000",
+         "confidence": null,
+         "valueString": "50.000"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "Entornado\nContenedor",
+         "confidence": null,
+         "valueString": "Entornado Contenedor"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "31.000",
+         "confidence": null,
+         "valueString": "31.000"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "BÁSICO Retenedor y diafrain",
+         "confidence": null,
+         "valueString": "BÁSICO Retenedor y diafrain"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "109.000",
+         "confidence": null,
+         "valueString": "109.000"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "Pago tecnico mecânica",
+         "confidence": null,
+         "valueString": "Pago tecnico mecânica"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "489.000",
+         "confidence": null,
+         "valueString": "489.000"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "arreglo y puesta de luces y conector",
+         "confidence": null,
+         "valueString": "arreglo y puesta de luces y conector"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "42.000",
+         "confidence": null,
+         "valueString": "42.000"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "Pago badaggie Contenedor",
+         "confidence": null,
+         "valueString": "Pago badaggie Contenedor"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "130.000",
+         "confidence": null,
+         "valueString": "130.000"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "farola luz siop Cabezota",
+         "confidence": null,
+         "valueString": "farola luz siop Cabezota"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "119.000",
+         "confidence": null,
+         "valueString": "119.000"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "TOTAL GASTOS",
+         "confidence": null,
+         "valueString": "TOTAL GASTOS"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "2'869.200",
+         "confidence": null,
+         "valueString": "2'869.200"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "SALDO ANTERIOR",
+         "confidence": null,
+         "valueString": "SALDO ANTERIOR"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "63.500",
+         "confidence": null,
+         "valueString": "63.500"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "SALDO VIAJE",
+         "confidence": null,
+         "valueString": "SALDO VIAJE"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "69.200",
+         "confidence": null,
+         "valueString": "69.200"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "content": null,
+       "confidence": null,
+       "valueObject": {
+        "Concepto": {
+         "type": "string",
+         "content": "SALDO NUEVO",
+         "confidence": null,
+         "valueString": "SALDO NUEVO"
+        },
+        "Valor": {
+         "type": "string",
+         "content": "5.700",
+         "confidence": null,
+         "valueString": "5.700"
+        }
+       }
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

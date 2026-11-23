@@ -29,4 +29,9 @@
     <ProjectReference Include="..\LogisticaBackend\LogisticaBackend.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Respuestas reales de Azure para las pruebas doradas del OCR. -->
+    <None Include="Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
