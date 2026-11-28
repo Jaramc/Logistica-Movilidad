@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileSpreadsheet, History, LogOut, ScrollText, Users } from 'lucide-react';
+import { History, IdCard, LogOut, Route, ScrollText, Truck, Users } from 'lucide-react';
 import type { Vista } from '../features/auth/permisos';
 
 interface NavbarProps {
@@ -12,7 +12,9 @@ interface NavbarProps {
 }
 
 const ETIQUETAS: Record<Vista, { texto: string; icono: React.ReactNode }> = {
-  procesador: { texto: 'Digitalizar Liquidación', icono: <FileSpreadsheet className="w-4 h-4" /> },
+  viajes: { texto: 'Viajes', icono: <Route className="w-4 h-4" /> },
+  conductores: { texto: 'Conductores', icono: <IdCard className="w-4 h-4" /> },
+  vehiculos: { texto: 'Vehículos', icono: <Truck className="w-4 h-4" /> },
   historial: { texto: 'Historial', icono: <History className="w-4 h-4" /> },
   usuarios: { texto: 'Usuarios', icono: <Users className="w-4 h-4" /> },
   auditoria: { texto: 'Auditoría', icono: <ScrollText className="w-4 h-4" /> },

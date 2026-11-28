@@ -3,22 +3,19 @@ import { type UseFormReturn, Controller } from 'react-hook-form';
 import type { PlanillaFormData } from '../schemas/planillaSchema';
 import { Input } from '../../../components/ui/Input';
 import { MoneyInput } from '../../../components/ui/MoneyInput';
-import { Truck, Calendar, User, MapPin } from 'lucide-react';
+import { Truck, Calendar, MapPin } from 'lucide-react';
 
 export interface DatosViajeFormProps {
   form: UseFormReturn<PlanillaFormData>;
-  /** Nombres de campo del modelo OCR ("Placa", "Flete", …) que no se encontraron en la planilla. */
+  /** Nombres de campo del modelo OCR ("Flete", …) que no se encontraron en la planilla. */
   camposNoEncontrados?: readonly string[];
-  /** Conductores que ya tienen planillas, para sugerirlos al escribir. */
-  conductoresConocidos?: readonly string[];
 }
-
-const ID_LISTA_CONDUCTORES = 'conductores-conocidos';
 
 const CLASE_NO_ENCONTRADO = 'border-amber-400 bg-amber-50 hover:border-amber-500';
 const AYUDA_NO_ENCONTRADO = 'El OCR no encontró este dato: complétalo a mano.';
 
-export const DatosViajeForm: React.FC<DatosViajeFormProps> = ({ form, camposNoEncontrados = [], conductoresConocidos = [] }) => {
+/** Datos del viaje, sin placa ni conductor: esos ya vienen fijos del viaje elegido (ViajeId). */
+export const DatosViajeForm: React.FC<DatosViajeFormProps> = ({ form, camposNoEncontrados = [] }) => {
   const { register, formState: { errors }, control } = form;
 
   /** Props de resaltado en ámbar para un campo que el OCR no encontró (el error de validación tiene prioridad). */
@@ -29,7 +26,7 @@ export const DatosViajeForm: React.FC<DatosViajeFormProps> = ({ form, camposNoEn
 
   return (
     <div className="space-y-6">
-      {/* Sección 1: Información de Ruta y Vehículo */}
+      {/* Sección 1: Información de Ruta */}
       <div>
         <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
           <Truck className="w-4 h-4 text-blue-600" />
@@ -37,43 +34,6 @@ export const DatosViajeForm: React.FC<DatosViajeFormProps> = ({ form, camposNoEn
         </h4>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input
-            label="Placa del Vehículo"
-            required
-            placeholder="Ej. STW514"
-            error={errors.placa?.message}
-            leftAddon={<Truck className="w-4 h-4" />}
-            {...resaltar('Placa', !!errors.placa)}
-            {...register('placa', {
-              onChange: (e) => {
-                form.setValue('placa', e.target.value.toUpperCase());
-              },
-            })}
-          />
-
-          <Input
-            label="Nombre del Conductor"
-            required
-            placeholder="Nombre completo"
-            error={errors.conductor?.message}
-            leftAddon={<User className="w-4 h-4" />}
-            list={conductoresConocidos.length > 0 ? ID_LISTA_CONDUCTORES : undefined}
-            autoComplete="off"
-            helperText={
-              errors.conductor
-                ? undefined
-                : 'Escríbelo igual que en sus planillas anteriores: el saldo anterior se encadena por nombre.'
-            }
-            {...register('conductor')}
-          />
-          {conductoresConocidos.length > 0 && (
-            <datalist id={ID_LISTA_CONDUCTORES} data-testid="lista-conductores">
-              {conductoresConocidos.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
-          )}
-
           <Input
             label="Ciudad de Origen"
             required
@@ -179,7 +139,7 @@ export const DatosViajeForm: React.FC<DatosViajeFormProps> = ({ form, camposNoEn
                 onChange={field.onChange}
                 disabled
                 error={errors.saldoAnterior?.message}
-                helperText="Lo asigna el servidor: saldo total de la última planilla del conductor"
+                helperText="Lo asigna el servidor: saldo actual de la cuenta corriente del conductor"
               />
             )}
           />
@@ -188,4 +148,3 @@ export const DatosViajeForm: React.FC<DatosViajeFormProps> = ({ form, camposNoEn
     </div>
   );
 };
-

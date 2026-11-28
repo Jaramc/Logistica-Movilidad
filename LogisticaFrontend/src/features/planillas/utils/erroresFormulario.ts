@@ -3,8 +3,6 @@ import type { PlanillaFormData } from '../schemas/planillaSchema';
 
 /** Campos del formulario que están en la pestaña "Datos del Viaje", con el nombre que ve el usuario. */
 const CAMPOS_PESTANA_VIAJE: Partial<Record<keyof PlanillaFormData, string>> = {
-  placa: 'Placa',
-  conductor: 'Conductor',
   origen: 'Origen',
   destino: 'Destino',
   fechaInicial: 'Fecha inicial',

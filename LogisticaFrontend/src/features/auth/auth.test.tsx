@@ -169,7 +169,7 @@ describe('Sesión expirada', () => {
     const estado: { usuario: UsuarioActual | null } = { usuario: usuarioDePrueba() };
     servidor.use(
       meDinamico(estado),
-      http.get('/api/planillas', () => {
+      http.get('/api/viajes', () => {
         estado.usuario = null; // el servidor ya no reconoce la cookie
         return sinSesion();
       })
@@ -225,18 +225,18 @@ describe('Menú según el rol', () => {
       .filter((t) => t !== 'Cerrar sesión');
   }
 
-  it('Consulta solo ve el historial y no la descarga', async () => {
-    expect(await botonesDelMenu(['Consulta'])).toEqual(['Historial']);
+  it('Consulta ve viajes, conductores, vehículos e historial, pero no la descarga', async () => {
+    expect(await botonesDelMenu(['Consulta'])).toEqual(['Viajes', 'Conductores', 'Vehículos', 'Historial']);
     expect(screen.queryByRole('button', { name: /Descargar Consolidado/ })).toBeNull();
   });
 
-  it('Revisor ve el procesador y el historial', async () => {
-    expect(await botonesDelMenu(['Revisor'])).toEqual(['Digitalizar Liquidación', 'Historial']);
+  it('Revisor ve lo mismo que Consulta (sin usuarios ni auditoría)', async () => {
+    expect(await botonesDelMenu(['Revisor'])).toEqual(['Viajes', 'Conductores', 'Vehículos', 'Historial']);
   });
 
   it('Administrador ve además usuarios, auditoría y la descarga del Excel', async () => {
     const user = userEvent.setup();
-    expect(await botonesDelMenu(['Administrador'])).toEqual(['Digitalizar Liquidación', 'Historial', 'Usuarios', 'Auditoría']);
+    expect(await botonesDelMenu(['Administrador'])).toEqual(['Viajes', 'Conductores', 'Vehículos', 'Historial', 'Usuarios', 'Auditoría']);
     await user.click(screen.getByRole('button', { name: /Historial/ }));
     expect(await screen.findByRole('button', { name: /Descargar Consolidado/ })).toBeInTheDocument();
   });

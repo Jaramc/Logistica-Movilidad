@@ -8,7 +8,10 @@ export const servidor = setupServer(
   http.get('/api/auth/antiforgery', () => {
     document.cookie = 'XSRF-TOKEN=token-prueba; path=/';
     return new HttpResponse(null, { status: 204 });
-  })
+  }),
+  // "Viajes" es la pantalla por defecto al entrar: sin esto, cualquier prueba que monte la
+  // aplicación completa dispararía una petición sin mockear. Cada prueba puede sobreescribirlo.
+  http.get('/api/viajes', () => HttpResponse.json({ items: [], totalCount: 0, page: 1, pageSize: 20, totalPages: 0 }))
 );
 
 export function usuarioDePrueba(cambios: Partial<UsuarioActual> = {}): UsuarioActual {

@@ -1,15 +1,17 @@
 import type { Rol, UsuarioActual } from './authApi';
 
-export type Vista = 'procesador' | 'historial' | 'usuarios' | 'auditoria';
+// "procesador" ya no es un destino independiente del menú: el procesador de planillas ahora
+// exige un viaje (ViajeId) y solo se abre desde el detalle de un viaje en "viajes".
+export type Vista = 'viajes' | 'conductores' | 'vehiculos' | 'historial' | 'usuarios' | 'auditoria';
 
 /**
  * Qué ve cada rol en el menú. Es SOLO comodidad de la interfaz:
  * el control real lo hace el backend con sus políticas.
  */
 const VISTAS_POR_ROL: Record<Rol, Vista[]> = {
-  Consulta: ['historial'],
-  Revisor: ['procesador', 'historial'],
-  Administrador: ['procesador', 'historial', 'usuarios', 'auditoria'],
+  Consulta: ['viajes', 'conductores', 'vehiculos', 'historial'],
+  Revisor: ['viajes', 'conductores', 'vehiculos', 'historial'],
+  Administrador: ['viajes', 'conductores', 'vehiculos', 'historial', 'usuarios', 'auditoria'],
 };
 
 export function vistasPermitidas(usuario: UsuarioActual | null): Vista[] {
@@ -18,7 +20,7 @@ export function vistasPermitidas(usuario: UsuarioActual | null): Vista[] {
   for (const rol of usuario.roles) {
     for (const vista of VISTAS_POR_ROL[rol] ?? []) vistas.add(vista);
   }
-  const orden: Vista[] = ['procesador', 'historial', 'usuarios', 'auditoria'];
+  const orden: Vista[] = ['viajes', 'conductores', 'vehiculos', 'historial', 'usuarios', 'auditoria'];
   return orden.filter((v) => vistas.has(v));
 }
 
