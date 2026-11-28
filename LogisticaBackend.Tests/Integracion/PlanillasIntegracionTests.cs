@@ -294,7 +294,7 @@ public class PlanillasIntegracionTests
                 empresaTransportadora = "Cliente Ejemplo", flete = 6_976_800m, anticipo = 2_800_000m,
                 gastos = new[]
                 {
-                    new { concepto = "COMISION", valor = 30_000m, etiqueta = "COMISION", descripcion = "2 codos vigias", categoria = "COMISION" },
+                    new { concepto = "COMISION", valor = 30_000m, etiqueta = "COMISION", descripcion = (string?)"2 codos vigias", categoria = "COMISION" },
                     new { concepto = "PEAJES", valor = 2_789_200m, etiqueta = "PEAJES", descripcion = (string?)null, categoria = "PEAJES" },
                 },
                 totalGastosDeclarado = 2_869_200m, saldoViajeDeclarado = 69_200m, saldoAnteriorDeclarado = 0m, saldoNuevoDeclarado = 69_200m,
