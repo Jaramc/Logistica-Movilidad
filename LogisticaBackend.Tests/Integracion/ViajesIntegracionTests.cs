@@ -200,6 +200,38 @@ public class ViajesIntegracionTests
     }
 
     [Fact]
+    public async Task Aprobar_DosSolicitudesSimultaneas_UnaGanaYLaOtraDa409()
+    {
+        var (revisor, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
+        var (otroRevisor, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
+        using (revisor)
+        using (otroRevisor)
+        {
+            var (conductorId, vehiculoId) = await SembrarCatalogosAsync();
+            var r = await revisor.PostAsync("/api/viajes", AbrirBody(conductorId, vehiculoId));
+            var viajeId = (await r.JsonAsync()).GetProperty("id").GetInt32();
+            await revisor.PostAsync($"/api/viajes/{viajeId}/traslados", new { fecha = "2026-06-13", valor = 2_800_000m, medio = "Transferencia" });
+            await SembrarPlanillaDelViajeAsync(viajeId, totalGastos: 2_869_200m, anticipoDeclarado: 2_800_000m);
+            // Pide el token CSRF antes para que ambas solicitudes salgan a la vez.
+            await revisor.PedirTokenCsrfAsync();
+            await otroRevisor.PedirTokenCsrfAsync();
+
+            var respuestas = await Task.WhenAll(
+                revisor.PostAsync($"/api/viajes/{viajeId}/aprobar"),
+                otroRevisor.PostAsync($"/api/viajes/{viajeId}/aprobar"));
+
+            var estados = respuestas.Select(x => x.StatusCode).OrderBy(x => x).ToArray();
+            estados.ShouldBe(new[] { HttpStatusCode.OK, HttpStatusCode.Conflict },
+                string.Join(" | ", await Task.WhenAll(respuestas.Select(x => x.Content.ReadAsStringAsync()))));
+
+            var cierres = await Sembrador.EnScopeAsync(_fabrica, sp =>
+                sp.GetRequiredService<AppDbContext>().MovimientosSaldo
+                    .CountAsync(m => m.ViajeId == viajeId && m.Tipo == TipoMovimientoSaldo.CierreViaje));
+            cierres.ShouldBe(1);
+        }
+    }
+
+    [Fact]
     public async Task RegistrarPago_ConViajeDeOtroConductor_Rechazado422()
     {
         var (administrador, _) = await Sembrador.SesionAsync(_fabrica, Roles.Administrador);
