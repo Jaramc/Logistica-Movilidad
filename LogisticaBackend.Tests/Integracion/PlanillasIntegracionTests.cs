@@ -272,8 +272,9 @@ public class PlanillasIntegracionTests
             guardada.SaldoNuevoDeclarado.ShouldBe(5_700m);
             guardada.TieneDiferencias.ShouldBeTrue();
             guardada.EmpresaTransportadora.ShouldBe("Cliente Ejemplo");
+            // Bloque 6 (fase 1): COMISION ya no conserva su categoría fija; "2 codos vigias" cae en Otros.
             guardada.Gastos.Single(g => g.Etiqueta == "COMISION").ShouldSatisfyAllConditions(
-                g => g.Descripcion.ShouldBe("2 codos vigias"), g => g.ConceptoCanonico.ShouldBe("COMISION"));
+                g => g.Descripcion.ShouldBe("2 codos vigias"), g => g.ConceptoCanonico.ShouldBe("OTROS"));
             guardada.Gastos.ShouldNotContain(g => LogisticaBackend.Domain.Services.ListaNegraConceptos.Coincide(g.Concepto));
         }
     }

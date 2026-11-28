@@ -160,10 +160,14 @@ public static partial class LectorPlanilla
         ["OTROS"] = ConceptoNormalizer.Otros,
     };
 
-    /// <summary>En estos renglones la nota escrita es un comentario, no otro gasto: conservan su categoría.</summary>
+    /// <summary>
+    /// En estos renglones la nota escrita es un comentario, no otro gasto: conservan su categoría.
+    /// COMISION ya no está aquí (fase 1, bloque 6): es una fila reutilizada como BASICO, así que su
+    /// categoría se deduce de lo escrito a mano, igual que cualquier fila reutilizada.
+    /// </summary>
     private static readonly HashSet<string> EtiquetasDeCategoriaFija = new(StringComparer.Ordinal)
     {
-        "COMISION", "PORCENTAJE", "PEAJES", "PARQUEO", "CARGUE", "DESCARGUE",
+        "PORCENTAJE", "PEAJES", "PARQUEO", "CARGUE", "DESCARGUE",
     };
 
     public const string EtiquetaObservaciones = "OBSERVACIONES";
