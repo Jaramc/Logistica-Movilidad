@@ -59,6 +59,12 @@ public class GlobalExceptionHandler : IExceptionHandler
                 // El mensaje lo construye código interno de confianza para el usuario final (no viene del cliente).
                 return (negocio.StatusCode, "Regla de negocio", negocio.Message);
 
+            case Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException:
+                // Otro usuario modificó el registro (xmin cambió) entre la lectura y el guardado.
+                _logger.LogInformation("Conflicto de concurrencia en {Metodo} {Ruta}.", http.Request.Method, http.Request.Path);
+                return (StatusCodes.Status409Conflict, "Conflicto de concurrencia",
+                    "El registro fue modificado por otra persona. Recarga e intenta de nuevo.");
+
             case BadHttpRequestException bad:
                 // Cuerpo demasiado grande, formulario mal formado, etc. El mensaje interno no se expone.
                 _logger.LogWarning("Solicitud HTTP inválida ({Status}) en {Ruta}.", bad.StatusCode, http.Request.Path);

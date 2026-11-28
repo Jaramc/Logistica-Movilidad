@@ -145,6 +145,7 @@ public class ViajesController : ControllerBase
                 detail: "El viaje ya fue aprobado; no se pueden registrar más traslados.");
         }
 
+        var ahora = _reloj.GetUtcNow().UtcDateTime;
         var traslado = new Traslado
         {
             ViajeId = id,
@@ -153,9 +154,12 @@ public class ViajesController : ControllerBase
             Medio = Enum.Parse<MedioTraslado>(dto.Medio),
             Nota = string.IsNullOrWhiteSpace(dto.Nota) ? null : dto.Nota.Trim(),
             RegistradoPorUsuarioId = IdActual(),
-            CreadoEn = _reloj.GetUtcNow().UtcDateTime,
+            CreadoEn = ahora,
         };
         _db.Traslados.Add(traslado);
+        // Reescribe la fila del viaje en el mismo SaveChanges: si alguien lo aprobó entre la lectura y
+        // este guardado, el xmin no coincide y EF lanza DbUpdateConcurrencyException (409), sin traslado.
+        viaje.ActualizadoEn = ahora;
         await _db.SaveChangesAsync(cancellationToken);
 
         await _auditoria.RegistrarAsync(AccionesAuditoria.TrasladoRegistrado, true, IdActual(), "Traslado", traslado.Id.ToString(),

@@ -778,6 +778,10 @@ namespace LogisticaBackend.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<DateTime?>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
                     b.Property<DateTime?>("AprobadoEn")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("aprobado_en");

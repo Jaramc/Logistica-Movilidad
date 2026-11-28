@@ -113,6 +113,30 @@ public class ViajesIntegracionTests
     }
 
     [Fact]
+    public async Task Traslado_ReescribeElViaje_UnaCopiaViejaChocaPorXmin()
+    {
+        var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
+        using (cliente)
+        {
+            var (conductorId, vehiculoId) = await SembrarCatalogosAsync();
+            var r = await cliente.PostAsync("/api/viajes", AbrirBody(conductorId, vehiculoId));
+            var viajeId = (await r.JsonAsync()).GetProperty("id").GetInt32();
+
+            using var scope = _fabrica.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            // Simula una aprobación que leyó el viaje antes de que llegara el traslado.
+            var copiaVieja = await db.Viajes.FirstAsync(v => v.Id == viajeId);
+
+            var traslado = await cliente.PostAsync($"/api/viajes/{viajeId}/traslados",
+                new { fecha = "2026-06-13", valor = 2_800_000m, medio = "Transferencia" });
+            traslado.StatusCode.ShouldBe(HttpStatusCode.Created, await traslado.Content.ReadAsStringAsync());
+
+            copiaVieja.Estado = EstadoViaje.Aprobado;
+            await Should.ThrowAsync<DbUpdateConcurrencyException>(() => db.SaveChangesAsync());
+        }
+    }
+
+    [Fact]
     public async Task Aprobar_SinPlanillaNiTraslado_Rechazado422()
     {
         var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
@@ -196,6 +220,109 @@ public class ViajesIntegracionTests
 
             var reabrir = await administrador.PostAsync($"/api/viajes/{viajeId}/reabrir", new { motivo = "Intento con pagos" });
             reabrir.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        }
+    }
+
+    [Fact]
+    public async Task Aprobar_DosSolicitudesSimultaneas_UnaGanaYLaOtraDa409()
+    {
+        var (revisor, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
+        var (otroRevisor, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
+        using (revisor)
+        using (otroRevisor)
+        {
+            var (conductorId, vehiculoId) = await SembrarCatalogosAsync();
+            var r = await revisor.PostAsync("/api/viajes", AbrirBody(conductorId, vehiculoId));
+            var viajeId = (await r.JsonAsync()).GetProperty("id").GetInt32();
+            await revisor.PostAsync($"/api/viajes/{viajeId}/traslados", new { fecha = "2026-06-13", valor = 2_800_000m, medio = "Transferencia" });
+            await SembrarPlanillaDelViajeAsync(viajeId, totalGastos: 2_869_200m, anticipoDeclarado: 2_800_000m);
+            // Pide el token CSRF antes para que ambas solicitudes salgan a la vez.
+            await revisor.PedirTokenCsrfAsync();
+            await otroRevisor.PedirTokenCsrfAsync();
+
+            // Ambas leen el viaje antes de que cualquiera tome el bloqueo del conductor y escriba.
+            HttpResponseMessage[] respuestas;
+            _fabrica.BarreraBloqueo.Armar(solicitudes: 2);
+            try
+            {
+                respuestas = await Task.WhenAll(
+                    revisor.PostAsync($"/api/viajes/{viajeId}/aprobar"),
+                    otroRevisor.PostAsync($"/api/viajes/{viajeId}/aprobar"));
+            }
+            finally
+            {
+                _fabrica.BarreraBloqueo.Desarmar();
+            }
+            _fabrica.BarreraBloqueo.Llegadas.ShouldBe(2, "La barrera no retuvo las dos aprobaciones; la prueba dependería del tiempo.");
+
+            var estados = respuestas.Select(x => x.StatusCode).OrderBy(x => x).ToArray();
+            estados.ShouldBe(new[] { HttpStatusCode.OK, HttpStatusCode.Conflict },
+                string.Join(" | ", await Task.WhenAll(respuestas.Select(x => x.Content.ReadAsStringAsync()))));
+
+            // El perdedor debe chocar por xmin (no por "El viaje ya fue aprobado").
+            var conflicto = respuestas.Single(x => x.StatusCode == HttpStatusCode.Conflict);
+            (await conflicto.JsonAsync()).GetProperty("detail").GetString()
+                .ShouldBe("El registro fue modificado por otra persona. Recarga e intenta de nuevo.");
+
+            var cierres = await Sembrador.EnScopeAsync(_fabrica, sp =>
+                sp.GetRequiredService<AppDbContext>().MovimientosSaldo
+                    .CountAsync(m => m.ViajeId == viajeId && m.Tipo == TipoMovimientoSaldo.CierreViaje));
+            cierres.ShouldBe(1);
+        }
+    }
+
+    [Fact]
+    public async Task RegistrarPago_ConViajeDeOtroConductor_Rechazado422()
+    {
+        var (administrador, _) = await Sembrador.SesionAsync(_fabrica, Roles.Administrador);
+        using (administrador)
+        {
+            var (conductorA, vehiculoA) = await SembrarCatalogosAsync();
+            var r = await administrador.PostAsync("/api/viajes", AbrirBody(conductorA, vehiculoA));
+            var viajeDeA = (await r.JsonAsync()).GetProperty("id").GetInt32();
+
+            var (conductorB, _) = await SembrarCatalogosAsync();
+            var pago = await administrador.PostAsync($"/api/conductores/{conductorB}/pagos",
+                new { tipo = "PagoEmpresa", valor = 50_000m, fecha = "2026-06-20", viajeId = viajeDeA });
+            pago.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity, await pago.Content.ReadAsStringAsync());
+
+            var inexistente = await administrador.PostAsync($"/api/conductores/{conductorB}/pagos",
+                new { tipo = "PagoEmpresa", valor = 50_000m, fecha = "2026-06-20", viajeId = int.MaxValue });
+            inexistente.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+
+            var hayPagos = await Sembrador.EnScopeAsync(_fabrica, sp =>
+                sp.GetRequiredService<AppDbContext>().PagosSaldo.AnyAsync(p => p.ConductorId == conductorB));
+            hayPagos.ShouldBeFalse();
+        }
+    }
+
+    [Fact]
+    public async Task Reabrir_PagoPosteriorSinViajeQueLoSalda_Rechazado409()
+    {
+        var (administrador, _) = await Sembrador.SesionAsync(_fabrica, Roles.Administrador);
+        using (administrador)
+        {
+            var (conductorId, vehiculoId) = await SembrarCatalogosAsync();
+            var r = await administrador.PostAsync("/api/viajes", AbrirBody(conductorId, vehiculoId));
+            var viajeId = (await r.JsonAsync()).GetProperty("id").GetInt32();
+            await administrador.PostAsync($"/api/viajes/{viajeId}/traslados", new { fecha = "2026-06-13", valor = 2_800_000m, medio = "Transferencia" });
+            // Saldo del viaje: 2.900.000 − 2.800.000 = +100.000.
+            await SembrarPlanillaDelViajeAsync(viajeId, totalGastos: 2_900_000m, anticipoDeclarado: 2_800_000m);
+            var aprobar = await administrador.PostAsync($"/api/viajes/{viajeId}/aprobar");
+            aprobar.StatusCode.ShouldBe(HttpStatusCode.OK, await aprobar.Content.ReadAsStringAsync());
+
+            // Pago sin viaje: la compensación FIFO lo aplica a la partida del viaje.
+            var pago = await administrador.PostAsync($"/api/conductores/{conductorId}/pagos",
+                new { tipo = "PagoEmpresa", valor = 100_000m, fecha = "2026-06-20" });
+            pago.StatusCode.ShouldBe(HttpStatusCode.Created, await pago.Content.ReadAsStringAsync());
+
+            var detalle = await administrador.GetAsync($"/api/viajes/{viajeId}");
+            (await detalle.JsonAsync()).GetProperty("estado").GetString().ShouldBe("Saldado");
+
+            var reabrir = await administrador.PostAsync($"/api/viajes/{viajeId}/reabrir", new { motivo = "Intento tras pago FIFO" });
+            reabrir.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+            (await reabrir.JsonAsync()).GetProperty("detail").GetString()
+                .ShouldBe("Hay pagos registrados después de la aprobación de este viaje; no se puede reabrir. Registra un ajuste si hace falta corregir.");
         }
     }
 }

@@ -24,7 +24,8 @@ public interface ICuentaConductorService
 
     /// <summary>
     /// Revierte el CierreViaje de un viaje aprobado (crea un Ajuste exactamente contrario, ligado al
-    /// viaje) y lo deja Abierto. Solo si el viaje no tiene pagos registrados.
+    /// viaje) y lo deja Abierto. Solo si el viaje no tiene pagos ligados ni el conductor tiene pagos
+    /// (PagoEmpresa o DescuentoNomina) registrados después del CierreViaje que se revierte.
     /// </summary>
     Task<MovimientoSaldo> ReabrirViajeAsync(int viajeId, string motivo, Guid? usuarioId, CancellationToken cancellationToken = default);
 
@@ -164,9 +165,23 @@ public sealed class CuentaConductorService : ICuentaConductorService
         }
 
         var justificacion = $"Reversión del cierre del viaje #{viajeId} (movimiento #{cierre.Id}): {motivo}";
-        var movimiento = await EjecutarAsync(viaje.ConductorId, (saldoAnterior, ct) =>
-            Task.FromResult(NuevoMovimiento(viaje.ConductorId, TipoMovimientoSaldo.Ajuste, -cierre.Valor, saldoAnterior.Valor,
-                DateOnly.FromDateTime(_reloj.GetUtcNow().UtcDateTime), justificacion, viajeId, null, usuarioId)),
+        var movimiento = await EjecutarAsync(viaje.ConductorId, async (saldoAnterior, ct) =>
+        {
+            // Con la compensación FIFO el ViajeId del pago no decide a qué partida se aplica: cualquier
+            // pago posterior al cierre pudo haberlo saldado. Se revisa dentro del bloqueo del conductor.
+            var conductorId = viaje.ConductorId;
+            var hayPagosPosteriores = await _db.MovimientosSaldo.AsNoTracking().AnyAsync(m =>
+                m.ConductorId == conductorId
+                && m.Id > cierre.Id
+                && (m.Tipo == TipoMovimientoSaldo.PagoEmpresa || m.Tipo == TipoMovimientoSaldo.DescuentoNomina), ct);
+            if (hayPagosPosteriores)
+            {
+                throw new ReglaDeNegocioException(StatusCodes.Status409Conflict,
+                    "Hay pagos registrados después de la aprobación de este viaje; no se puede reabrir. Registra un ajuste si hace falta corregir.");
+            }
+            return NuevoMovimiento(viaje.ConductorId, TipoMovimientoSaldo.Ajuste, -cierre.Valor, saldoAnterior.Valor,
+                DateOnly.FromDateTime(_reloj.GetUtcNow().UtcDateTime), justificacion, viajeId, null, usuarioId);
+        },
             cancellationToken,
             antesDeGuardar: async ct =>
             {
@@ -211,6 +226,19 @@ public sealed class CuentaConductorService : ICuentaConductorService
 
         var movimiento = await EjecutarAsync(conductorId, async (saldoAnterior, ct) =>
         {
+            if (viajeId is { } idViaje)
+            {
+                var conductorDelViaje = await _db.Viajes.AsNoTracking()
+                    .Where(v => v.Id == idViaje)
+                    .Select(v => (int?)v.ConductorId)
+                    .FirstOrDefaultAsync(ct);
+                if (conductorDelViaje != conductorId)
+                {
+                    throw new ReglaDeNegocioException(StatusCodes.Status422UnprocessableEntity,
+                        "El viaje indicado no existe o no pertenece a este conductor.");
+                }
+            }
+
             _db.PagosSaldo.Add(pago);
             await _db.SaveChangesAsync(ct); // asigna pago.Id, que necesita el movimiento
             var tipoMovimiento = tipo == TipoPago.PagoEmpresa ? TipoMovimientoSaldo.PagoEmpresa : TipoMovimientoSaldo.DescuentoNomina;

@@ -1,3 +1,4 @@
+using LogisticaBackend.Data;
 using LogisticaBackend.DTOs;
 using LogisticaBackend.Interfaces;
 using Microsoft.AspNetCore.Hosting;
@@ -18,6 +19,9 @@ public class FabricaApi : WebApplicationFactory<Program>
     private readonly Dictionary<string, string?> _ajustes;
 
     public OcrFalso Ocr { get; } = new();
+
+    /// <summary>Desarmada por defecto; las pruebas de concurrencia la arman.</summary>
+    public BarreraBloqueoConductor BarreraBloqueo { get; } = new();
 
     public FabricaApi(PostgresFixture postgres, string baseDeDatos, Dictionary<string, string?>? ajustes = null)
     {
@@ -52,6 +56,7 @@ public class FabricaApi : WebApplicationFactory<Program>
         {
             servicios.RemoveAll<IPlanillaOcrService>();
             servicios.AddSingleton<IPlanillaOcrService>(Ocr);
+            servicios.ConfigureDbContext<AppDbContext>(o => o.AddInterceptors(BarreraBloqueo));
         });
     }
 }

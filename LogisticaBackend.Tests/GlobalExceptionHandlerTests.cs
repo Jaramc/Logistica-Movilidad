@@ -55,6 +55,18 @@ public class GlobalExceptionHandlerTests
     }
 
     [Fact]
+    public async Task ConflictoDeConcurrencia_Devuelve409()
+    {
+        var (status, cuerpo) = await ManejarAsync(new Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException("expected 1 row(s) but affected 0"));
+
+        status.ShouldBe(409);
+        cuerpo.ShouldNotContain("affected 0");
+        using var json = JsonDocument.Parse(cuerpo);
+        json.RootElement.GetProperty("detail").GetString()
+            .ShouldBe("El registro fue modificado por otra persona. Recarga e intenta de nuevo.");
+    }
+
+    [Fact]
     public async Task SolicitudHttpInvalida_NoExponeMensajeInterno()
     {
         var (status, cuerpo) = await ManejarAsync(new BadHttpRequestException("Unexpected end of request content.", 400));
