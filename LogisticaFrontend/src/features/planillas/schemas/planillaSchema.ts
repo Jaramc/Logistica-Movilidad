@@ -141,11 +141,8 @@ const esFechaIsoValida = (valor: string) => {
 };
 
 export const PlanillaFormSchema = z.object({
-  // Datos Generales del Viaje
-  placa: z.string()
-    .trim()
-    .refine(v => /^[A-Z]{3}\d{3}$/.test(normalizarPlaca(v)), 'La placa debe tener 3 letras y 3 números (p. ej. STW514)'),
-  conductor: z.string().trim().min(2, 'El nombre del conductor es requerido'),
+  // Datos Generales del Viaje. La placa y el conductor ya no se editan aquí: vienen del viaje
+  // (ViajeId); la placa que haya leído el OCR solo se compara en el servidor, no se valida acá.
   origen: z.string().trim().min(2, 'La ciudad de origen es requerida'),
   destino: z.string().trim().min(2, 'La ciudad de destino es requerida'),
   fechaInicial: z.string().refine(esFechaIsoValida, 'Fecha inicial válida requerida'),
@@ -176,14 +173,12 @@ export type PlanillaFormData = z.infer<typeof PlanillaFormSchema>;
  * el servidor los recalcula con decimal y los devuelve en la respuesta.
  */
 export const GuardarPlanillaDtoSchema = z.object({
-  placa: z.string().min(1),
-  conductor: z.string().min(1),
+  /** El conductor y la placa de la entidad salen de este viaje, no del cuerpo de la petición. */
+  viajeId: z.number(),
   origen: z.string().min(1),
   destino: z.string().min(1),
   fechaInicial: z.string(),
   fechaFinal: z.string(),
-  manifiesto: z.string().optional(),
-  empresaTransportadora: z.string().optional(),
   flete: z.number(),
   anticipo: z.number(),
   gastos: z.array(
@@ -196,6 +191,10 @@ export const GuardarPlanillaDtoSchema = z.object({
       categoria: z.enum(CATEGORIAS_GASTO).nullable().optional(),
     })
   ),
+  /** Lo que leyó el OCR, solo para que el servidor advierta si no coincide con la placa del viaje. */
+  placa: z.string().nullable().optional(),
+  manifiesto: z.string().optional(),
+  empresaTransportadora: z.string().optional(),
   /** El jsonOcrCrudo que devolvió /extraer. El servidor lo valida (≤ 256 KB, JSON) o guarda null. */
   jsonOcrCrudo: z.string().nullable().optional(),
   /** Valores escritos en papel (con signo). Solo auditoría: el servidor nunca los usa para calcular. */
@@ -203,8 +202,6 @@ export const GuardarPlanillaDtoSchema = z.object({
   saldoViajeDeclarado: z.number().nullable().optional(),
   saldoAnteriorDeclarado: z.number().nullable().optional(),
   saldoNuevoDeclarado: z.number().nullable().optional(),
-  /** Solo en la primera planilla del conductor: usar el saldo anterior escrito como saldo inicial. */
-  usarSaldoAnteriorDeclarado: z.boolean().optional(),
 });
 
 export type GuardarPlanillaDto = z.infer<typeof GuardarPlanillaDtoSchema>;

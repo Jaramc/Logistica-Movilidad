@@ -25,6 +25,7 @@ public class PlanillasController : ControllerBase
     private readonly AppDbContext _context;
     private readonly TimeProvider _reloj;
     private readonly IAuditoriaService _auditoria;
+    private readonly ICuentaConductorService _cuenta;
     private readonly LiquidacionesOptions _reglas;
     private readonly ILogger<PlanillasController> _logger;
 
@@ -34,6 +35,7 @@ public class PlanillasController : ControllerBase
         AppDbContext context,
         TimeProvider reloj,
         IAuditoriaService auditoria,
+        ICuentaConductorService cuenta,
         IOptions<LiquidacionesOptions> reglas,
         ILogger<PlanillasController> logger)
     {
@@ -42,6 +44,7 @@ public class PlanillasController : ControllerBase
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _reloj = reloj ?? throw new ArgumentNullException(nameof(reloj));
         _auditoria = auditoria ?? throw new ArgumentNullException(nameof(auditoria));
+        _cuenta = cuenta ?? throw new ArgumentNullException(nameof(cuenta));
         _reglas = reglas?.Value ?? throw new ArgumentNullException(nameof(reglas));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -89,49 +92,36 @@ public class PlanillasController : ControllerBase
     [Consumes("application/json")]
     [ProducesResponseType(typeof(PlanillaGuardadaDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> GuardarPlanilla(
         [FromBody] GuardarPlanillaDto dto,
         CancellationToken cancellationToken)
     {
         var usuarioId = IdUsuarioActual();
-        var conductor = NormalizarConductor(dto.Conductor);
 
-        // Transacción + bloqueo por conductor: dos guardados simultáneos del mismo conductor no
-        // pueden tomar el mismo saldo anterior.
-        await using var transaccion = _context.Database.IsRelational()
-            ? await _context.Database.BeginTransactionAsync(cancellationToken)
-            : null;
-        if (_context.Database.IsNpgsql())
+        var viaje = await _context.Viajes.Include(v => v.Conductor).Include(v => v.Vehiculo)
+            .FirstOrDefaultAsync(v => v.Id == dto.ViajeId, cancellationToken);
+        if (viaje is null)
         {
-            await _context.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT pg_advisory_xact_lock(hashtext({"planilla-conductor:" + conductor}))", cancellationToken);
+            return Problem(statusCode: StatusCodes.Status404NotFound, title: "Viaje no encontrado", detail: "El viaje no existe.");
+        }
+        if (await _context.Planillas.AnyAsync(p => p.ViajeId == dto.ViajeId, cancellationToken))
+        {
+            return PlanillaDuplicadaDelViaje();
         }
 
-        // El saldo anterior es el SaldoTotal de la última planilla del conductor. Única excepción: la
-        // primera planilla del conductor en el sistema, donde el revisor puede confirmar el saldo
-        // escrito en papel como saldo inicial (si no, toda la cadena del conductor arrancaría en 0).
-        var ultima = await UltimaPlanillaAsync(conductor, cancellationToken);
-        var saldoAnterior = ultima?.SaldoTotal ?? 0m;
         var advertencias = new List<string>();
-        var usaSaldoInicial = false;
-        if (dto.UsarSaldoAnteriorDeclarado && dto.SaldoAnteriorDeclarado is { } saldoInicial)
+        var placaViaje = viaje.Vehiculo!.Placa;
+        if (!string.IsNullOrWhiteSpace(dto.Placa) && Placa.Normalizar(dto.Placa) != placaViaje)
         {
-            if (ultima is null)
-            {
-                saldoAnterior = CalculadoraLiquidacion.Redondear(saldoInicial);
-                usaSaldoInicial = true;
-                advertencias.Add($"Primera planilla del conductor en el sistema: se tomó como saldo inicial el saldo anterior escrito en papel ({DescribirSaldo(saldoAnterior)}).");
-            }
-            else
-            {
-                advertencias.Add("El conductor ya tiene planillas en el sistema: se ignoró el saldo inicial y se usó el saldo de su última planilla.");
-            }
+            advertencias.Add($"La placa leída por el OCR ({Placa.Normalizar(dto.Placa)}) no coincide con la del viaje ({placaViaje}).");
         }
-        if (ultima is not null && ultima.FechaFinal > dto.FechaInicial)
-        {
-            advertencias.Add($"Ya existe una planilla de este conductor que termina después de esta (#{ultima.Id}, fin {ultima.FechaFinal:yyyy-MM-dd}). " +
-                "El saldo anterior se tomó de esa planilla; si esta es más antigua, revisa la cadena de saldos.");
-        }
+
+        // El saldo anterior ya no se encadena por el nombre del conductor: es el saldo actual de su
+        // cuenta corriente (ver CuentaConductorService). SaldoAnteriorDeclarado queda solo para
+        // auditoría y para advertir si lo escrito en papel difiere del saldo real.
+        var saldoAnterior = await _cuenta.ObtenerSaldoAsync(viaje.ConductorId, cancellationToken);
 
         var calculo = CalculadoraLiquidacion.Calcular(
             dto.Flete, dto.Anticipo, dto.Gastos.Select(g => g.Valor), saldoAnterior);
@@ -150,11 +140,13 @@ public class PlanillasController : ControllerBase
             _logger.LogWarning("jsonOcrCrudo descartado ({Motivo}); se guarda null. Usuario {UsuarioId}.", resultadoJson, usuarioId);
         }
 
-        // Mapeo explícito: solo se copian los campos permitidos (anti-overposting).
+        // Mapeo explícito: solo se copian los campos permitidos (anti-overposting). Placa y Conductor
+        // salen del viaje, nunca del cuerpo de la petición.
         var entidad = new PlanillaViaje
         {
-            Placa = Placa.Normalizar(dto.Placa),
-            Conductor = conductor,
+            ViajeId = viaje.Id,
+            Placa = placaViaje,
+            Conductor = NormalizarConductor(viaje.Conductor!.NombreCompleto),
             Origen = dto.Origen.Trim(),
             Destino = dto.Destino.Trim(),
             FechaInicial = dto.FechaInicial,
@@ -195,8 +187,27 @@ public class PlanillasController : ControllerBase
             }).ToList()
         };
 
+        await using var transaccion = _context.Database.IsRelational()
+            ? await _context.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+
         await _context.Planillas.AddAsync(entidad, cancellationToken);
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (EsPlanillaDuplicadaDelViaje(ex))
+        {
+            return PlanillaDuplicadaDelViaje();
+        }
+
+        // La primera planilla de un viaje lo pasa de Abierto a EnRevision: queda bloqueado (el índice
+        // único de viajes abiertos lo protege) hasta que se aprueba o se reabre.
+        if (viaje.Estado == EstadoViaje.Abierto)
+        {
+            viaje.Estado = EstadoViaje.EnRevision;
+            await _context.SaveChangesAsync(cancellationToken);
+        }
         if (transaccion is not null)
         {
             await transaccion.CommitAsync(cancellationToken);
@@ -205,11 +216,11 @@ public class PlanillasController : ControllerBase
         _logger.LogInformation("Planilla {Id} guardada por el usuario {UsuarioId}.", entidad.Id, usuarioId);
         if (dto.SaldoAnteriorDeclarado is { } declarado && CalculadoraLiquidacion.Redondear(declarado) != entidad.SaldoAnterior)
         {
-            advertencias.Add($"El saldo anterior escrito en la planilla ({DescribirSaldo(declarado)}) difiere del calculado " +
-                $"desde la última planilla del conductor ({DescribirSaldo(entidad.SaldoAnterior)}). Se guardó el calculado.");
+            advertencias.Add($"El saldo anterior escrito en la planilla ({DescribirSaldo(declarado)}) difiere del saldo actual " +
+                $"del conductor ({DescribirSaldo(entidad.SaldoAnterior)}). Se guardó el saldo real.");
         }
         await _auditoria.RegistrarAsync(AccionesAuditoria.PlanillaGuardada, true, usuarioId, "PlanillaViaje", entidad.Id.ToString(),
-            new { placa = entidad.Placa, renglones = entidad.Gastos.Count, entidad.TotalGastos, entidad.SaldoTotal, saldoInicial = usaSaldoInicial });
+            new { viajeId = viaje.Id, placa = entidad.Placa, renglones = entidad.Gastos.Count, entidad.TotalGastos, entidad.SaldoTotal });
 
         return CreatedAtAction(
             nameof(ObtenerPlanillaPorId),
@@ -218,57 +229,14 @@ public class PlanillasController : ControllerBase
                 advertencias.Count > 0 ? advertencias : null));
     }
 
-    /// <summary>
-    /// Saldo anterior que tendrá la próxima planilla del conductor (el SaldoTotal de su última planilla).
-    /// La UI lo muestra antes de aprobar para compararlo con el escrito en papel.
-    /// </summary>
-    [HttpGet("saldo-anterior")]
-    [Authorize(Policy = Politicas.PuedeLeer)]
-    [ProducesResponseType(typeof(SaldoAnteriorDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status422UnprocessableEntity)]
-    public async Task<IActionResult> ObtenerSaldoAnterior([FromQuery] string? conductor, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(conductor) || conductor.Length > 150)
-        {
-            return Problemas.Validacion(HttpContext, new Dictionary<string, string[]>
-            {
-                ["conductor"] = new[] { "Indique el conductor (máximo 150 caracteres)." },
-            });
-        }
+    private ObjectResult PlanillaDuplicadaDelViaje() =>
+        Problem(statusCode: StatusCodes.Status409Conflict, title: "El viaje ya tiene planilla",
+            detail: "Este viaje ya tiene una planilla guardada.");
 
-        var normalizado = NormalizarConductor(conductor);
-        var ultima = await UltimaPlanillaAsync(normalizado, cancellationToken);
-        return Ok(new SaldoAnteriorDto(normalizado, ultima?.SaldoTotal ?? 0m, ultima?.Id));
-    }
-
-    /// <summary>
-    /// Nombres de conductores que ya tienen planillas, del más reciente al más antiguo. La UI los
-    /// sugiere al escribir: la cadena de saldos se encadena por nombre, así que un nombre escrito
-    /// distinto ("Pedro" vs "PEDRO PEREZ") empezaría una cadena nueva en 0.
-    /// </summary>
-    [HttpGet("conductores")]
-    [Authorize(Policy = Politicas.PuedeLeer)]
-    [ProducesResponseType(typeof(List<string>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> ObtenerConductores(CancellationToken cancellationToken)
-    {
-        var nombres = await _context.Planillas.AsNoTracking()
-            .GroupBy(p => p.Conductor)
-            .Select(g => new { Nombre = g.Key, Ultima = g.Max(p => p.FechaFinal) })
-            .OrderByDescending(x => x.Ultima).ThenBy(x => x.Nombre)
-            .Take(500)
-            .Select(x => x.Nombre)
-            .ToListAsync(cancellationToken);
-        return Ok(nombres);
-    }
-
-    private sealed record UltimaPlanilla(int Id, decimal SaldoTotal, DateOnly FechaFinal);
-
-    private async Task<UltimaPlanilla?> UltimaPlanillaAsync(string conductorNormalizado, CancellationToken cancellationToken) =>
-        await _context.Planillas.AsNoTracking()
-            .Where(p => p.Conductor.ToUpper() == conductorNormalizado)
-            .OrderByDescending(p => p.FechaFinal).ThenByDescending(p => p.Id)
-            .Select(p => new UltimaPlanilla(p.Id, p.SaldoTotal, p.FechaFinal))
-            .FirstOrDefaultAsync(cancellationToken);
+    private static bool EsPlanillaDuplicadaDelViaje(DbUpdateException ex) =>
+        ex.InnerException is Npgsql.PostgresException pg
+        && pg.SqlState == Npgsql.PostgresErrorCodes.UniqueViolation
+        && pg.ConstraintName == Data.Configurations.RestriccionesCatalogos.PlanillaViajeUnica;
 
     private static decimal? Declarado(decimal? valor) => valor is { } v ? CalculadoraLiquidacion.Redondear(v) : null;
 

@@ -16,14 +16,15 @@ public class GuardarPlanillaDtoValidator : AbstractValidator<GuardarPlanillaDto>
         var maxRenglones = opciones.Value.MaximoRenglonesGasto;
         var topeTexto = tope.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("es-CO"));
 
-        RuleFor(x => x.Placa)
-            .NotEmpty().WithMessage("La placa del vehículo es obligatoria.")
-            .MaximumLength(10).WithMessage("La placa no puede exceder 10 caracteres.")
-            .Must(Placa.EsValida).WithMessage("La placa debe tener 3 letras y 3 números (p. ej. WCN410).");
+        RuleFor(x => x.ViajeId)
+            .GreaterThan(0).WithMessage("Debe indicar el viaje al que pertenece la planilla.");
 
-        RuleFor(x => x.Conductor)
-            .NotEmpty().WithMessage("El nombre del conductor es obligatorio.")
-            .MaximumLength(150).WithMessage("El nombre del conductor no puede exceder 150 caracteres.");
+        // Lo que leyó el OCR, solo para comparar con la placa del viaje (advertencia, no error):
+        // no es obligatoria porque el revisor puede guardar aunque el OCR no la haya encontrado.
+        RuleFor(x => x.Placa)
+            .MaximumLength(10).WithMessage("La placa no puede exceder 10 caracteres.")
+            .Must(p => string.IsNullOrWhiteSpace(p) || Placa.EsValida(p))
+            .WithMessage("La placa debe tener 3 letras y 3 números (p. ej. WCN410).");
 
         RuleFor(x => x.Origen)
             .NotEmpty().WithMessage("La ciudad de origen es obligatoria.")

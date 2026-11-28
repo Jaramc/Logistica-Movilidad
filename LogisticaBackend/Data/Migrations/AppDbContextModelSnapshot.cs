@@ -22,6 +22,68 @@ namespace LogisticaBackend.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.HasSequence<int>("seq_conductores_codigo");
+
+            modelBuilder.Entity("LogisticaBackend.Domain.Entities.Conductor", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Activo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("activo");
+
+                    b.Property<string>("Cedula")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("cedula");
+
+                    b.Property<string>("Codigo")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("codigo");
+
+                    b.Property<DateTime>("CreadoEn")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("CuentaMicrosoft")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("cuenta_microsoft");
+
+                    b.Property<string>("NombreCompleto")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("nombre_completo");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Cedula")
+                        .IsUnique()
+                        .HasDatabaseName("ux_conductores_cedula");
+
+                    b.HasIndex("Codigo")
+                        .IsUnique()
+                        .HasDatabaseName("ux_conductores_codigo");
+
+                    b.ToTable("conductores", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_conductores_cedula_formato", "cedula ~ '^[0-9]{6,12}$'");
+                        });
+                });
+
             modelBuilder.Entity("LogisticaBackend.Domain.Entities.GastoDetalle", b =>
                 {
                     b.Property<int>("Id")
@@ -85,6 +147,154 @@ namespace LogisticaBackend.Data.Migrations
                             t.HasCheckConstraint("ck_gastos_detalle_categoria_valida", "concepto_canonico IN ('PEAJES', 'PORCENTAJE', 'COMISION', 'PARQUEO', 'ACPM', 'ENGRASE', 'TENSIONADA', 'ASEO', 'LLANTAS', 'UREA', 'CARGUE', 'DESCARGUE', 'CARROSADA', 'DESCARROSADA', 'PAPELERIA', 'OTROS')");
 
                             t.HasCheckConstraint("ck_gastos_detalle_valor_no_negativo", "valor >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("LogisticaBackend.Domain.Entities.MovimientoSaldo", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("ConductorId")
+                        .HasColumnType("integer")
+                        .HasColumnName("conductor_id");
+
+                    b.Property<DateTime>("CreadoEn")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreadoPorUsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("creado_por_usuario_id");
+
+                    b.Property<DateOnly>("FechaCorte")
+                        .HasColumnType("date")
+                        .HasColumnName("fecha_corte");
+
+                    b.Property<string>("Justificacion")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("justificacion");
+
+                    b.Property<int?>("PagoSaldoId")
+                        .HasColumnType("integer")
+                        .HasColumnName("pago_saldo_id");
+
+                    b.Property<decimal>("SaldoResultante")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("saldo_resultante");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("tipo");
+
+                    b.Property<decimal>("Valor")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("valor");
+
+                    b.Property<int?>("ViajeId")
+                        .HasColumnType("integer")
+                        .HasColumnName("viaje_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConductorId")
+                        .HasDatabaseName("ix_movimientos_saldo_conductor_id");
+
+                    b.HasIndex("CreadoPorUsuarioId");
+
+                    b.HasIndex("PagoSaldoId")
+                        .HasDatabaseName("ix_movimientos_saldo_pago_saldo_id");
+
+                    b.HasIndex("ViajeId")
+                        .HasDatabaseName("ix_movimientos_saldo_viaje_id");
+
+                    b.ToTable("movimientos_saldo", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_movimientos_saldo_justificacion_obligatoria", "tipo NOT IN ('Inicial', 'Ajuste') OR justificacion IS NOT NULL");
+                        });
+                });
+
+            modelBuilder.Entity("LogisticaBackend.Domain.Entities.PagoSaldo", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ConductorId")
+                        .HasColumnType("integer")
+                        .HasColumnName("conductor_id");
+
+                    b.Property<DateTime>("CreadoEn")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<DateOnly>("Fecha")
+                        .HasColumnType("date")
+                        .HasColumnName("fecha");
+
+                    b.Property<string>("Medio")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("medio");
+
+                    b.Property<string>("Nota")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("nota");
+
+                    b.Property<string>("Quincena")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("quincena");
+
+                    b.Property<Guid?>("RegistradoPorUsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("registrado_por_usuario_id");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("tipo");
+
+                    b.Property<decimal>("Valor")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("valor");
+
+                    b.Property<int?>("ViajeId")
+                        .HasColumnType("integer")
+                        .HasColumnName("viaje_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConductorId")
+                        .HasDatabaseName("ix_pagos_saldo_conductor_id");
+
+                    b.HasIndex("RegistradoPorUsuarioId");
+
+                    b.HasIndex("ViajeId")
+                        .HasDatabaseName("ix_pagos_saldo_viaje_id");
+
+                    b.ToTable("pagos_saldo", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_pagos_saldo_valor_positivo", "valor > 0");
                         });
                 });
 
@@ -241,6 +451,10 @@ namespace LogisticaBackend.Data.Migrations
                         .HasColumnType("xid")
                         .HasColumnName("xmin");
 
+                    b.Property<int?>("ViajeId")
+                        .HasColumnType("integer")
+                        .HasColumnName("viaje_id");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CreadoPorUsuarioId");
@@ -255,6 +469,10 @@ namespace LogisticaBackend.Data.Migrations
                         .HasDatabaseName("ix_planillas_viaje_placa");
 
                     b.HasIndex("RevisadoPorUsuarioId");
+
+                    b.HasIndex("ViajeId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_planillas_viaje_viaje_id");
 
                     b.ToTable("planillas_viaje", null, t =>
                         {
@@ -324,6 +542,62 @@ namespace LogisticaBackend.Data.Migrations
                         .HasDatabaseName("ix_auditoria_usuario_fecha");
 
                     b.ToTable("auditoria", (string)null);
+                });
+
+            modelBuilder.Entity("LogisticaBackend.Domain.Entities.Traslado", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreadoEn")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<DateOnly>("Fecha")
+                        .HasColumnType("date")
+                        .HasColumnName("fecha");
+
+                    b.Property<string>("Medio")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("medio");
+
+                    b.Property<string>("Nota")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("nota");
+
+                    b.Property<Guid?>("RegistradoPorUsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("registrado_por_usuario_id");
+
+                    b.Property<decimal>("Valor")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("valor");
+
+                    b.Property<int>("ViajeId")
+                        .HasColumnType("integer")
+                        .HasColumnName("viaje_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RegistradoPorUsuarioId");
+
+                    b.HasIndex("ViajeId")
+                        .HasDatabaseName("ix_traslados_viaje_id");
+
+                    b.ToTable("traslados", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_traslados_valor_positivo", "valor > 0");
+                        });
                 });
 
             modelBuilder.Entity("LogisticaBackend.Domain.Entities.Usuario", b =>
@@ -417,6 +691,188 @@ namespace LogisticaBackend.Data.Migrations
                         .HasDatabaseName("UserNameIndex");
 
                     b.ToTable("usuarios", (string)null);
+                });
+
+            modelBuilder.Entity("LogisticaBackend.Domain.Entities.Vehiculo", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Activo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("activo");
+
+                    b.Property<string>("CategoriaPeaje")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("categoria_peaje");
+
+                    b.Property<string>("Placa")
+                        .IsRequired()
+                        .HasMaxLength(6)
+                        .HasColumnType("character varying(6)")
+                        .HasColumnName("placa");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasDefaultValue("Tractomula")
+                        .HasColumnName("tipo");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Placa")
+                        .IsUnique()
+                        .HasDatabaseName("ux_vehiculos_placa");
+
+                    b.ToTable("vehiculos", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_vehiculos_placa_formato", "placa ~ '^[A-Z]{3}[0-9]{3}$'");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Activo = true,
+                            Placa = "JYP108",
+                            Tipo = "Tractomula"
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Activo = true,
+                            Placa = "JYP052",
+                            Tipo = "Tractomula"
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Activo = true,
+                            Placa = "NNN977",
+                            Tipo = "Tractomula"
+                        },
+                        new
+                        {
+                            Id = 4,
+                            Activo = true,
+                            Placa = "STW514",
+                            Tipo = "Tractomula"
+                        });
+                });
+
+            modelBuilder.Entity("LogisticaBackend.Domain.Entities.Viaje", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("AprobadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("aprobado_en");
+
+                    b.Property<Guid?>("AprobadoPorUsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("aprobado_por_usuario_id");
+
+                    b.Property<string>("Cliente")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("cliente");
+
+                    b.Property<int>("ConductorId")
+                        .HasColumnType("integer")
+                        .HasColumnName("conductor_id");
+
+                    b.Property<Guid?>("CreadoPorUsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("creado_por_usuario_id");
+
+                    b.Property<string>("Destino")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("destino");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("estado");
+
+                    b.Property<DateOnly?>("FechaFin")
+                        .HasColumnType("date")
+                        .HasColumnName("fecha_fin");
+
+                    b.Property<DateOnly>("FechaInicio")
+                        .HasColumnType("date")
+                        .HasColumnName("fecha_inicio");
+
+                    b.Property<decimal>("Flete")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("flete");
+
+                    b.Property<string>("Manifiesto")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("manifiesto");
+
+                    b.Property<string>("Origen")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("origen");
+
+                    b.Property<decimal?>("SaldoViaje")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("saldo_viaje");
+
+                    b.Property<int>("VehiculoId")
+                        .HasColumnType("integer")
+                        .HasColumnName("vehiculo_id");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AprobadoPorUsuarioId");
+
+                    b.HasIndex("ConductorId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_viajes_conductor_abierto")
+                        .HasFilter("estado IN ('Abierto', 'EnRevision')");
+
+                    b.HasIndex("CreadoPorUsuarioId");
+
+                    b.HasIndex("VehiculoId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_viajes_vehiculo_abierto")
+                        .HasFilter("estado IN ('Abierto', 'EnRevision')");
+
+                    b.ToTable("viajes", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_viajes_fechas_en_orden", "fecha_fin IS NULL OR fecha_fin >= fecha_inicio");
+                        });
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", b =>
@@ -560,6 +1016,59 @@ namespace LogisticaBackend.Data.Migrations
                     b.Navigation("PlanillaViaje");
                 });
 
+            modelBuilder.Entity("LogisticaBackend.Domain.Entities.MovimientoSaldo", b =>
+                {
+                    b.HasOne("LogisticaBackend.Domain.Entities.Conductor", "Conductor")
+                        .WithMany()
+                        .HasForeignKey("ConductorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LogisticaBackend.Domain.Entities.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("CreadoPorUsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("LogisticaBackend.Domain.Entities.PagoSaldo", "PagoSaldo")
+                        .WithMany()
+                        .HasForeignKey("PagoSaldoId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("LogisticaBackend.Domain.Entities.Viaje", "Viaje")
+                        .WithMany()
+                        .HasForeignKey("ViajeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Conductor");
+
+                    b.Navigation("PagoSaldo");
+
+                    b.Navigation("Viaje");
+                });
+
+            modelBuilder.Entity("LogisticaBackend.Domain.Entities.PagoSaldo", b =>
+                {
+                    b.HasOne("LogisticaBackend.Domain.Entities.Conductor", "Conductor")
+                        .WithMany()
+                        .HasForeignKey("ConductorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LogisticaBackend.Domain.Entities.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("RegistradoPorUsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("LogisticaBackend.Domain.Entities.Viaje", "Viaje")
+                        .WithMany()
+                        .HasForeignKey("ViajeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Conductor");
+
+                    b.Navigation("Viaje");
+                });
+
             modelBuilder.Entity("LogisticaBackend.Domain.Entities.PlanillaViaje", b =>
                 {
                     b.HasOne("LogisticaBackend.Domain.Entities.Usuario", "CreadoPor")
@@ -572,9 +1081,61 @@ namespace LogisticaBackend.Data.Migrations
                         .HasForeignKey("RevisadoPorUsuarioId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("LogisticaBackend.Domain.Entities.Viaje", "Viaje")
+                        .WithOne("Planilla")
+                        .HasForeignKey("LogisticaBackend.Domain.Entities.PlanillaViaje", "ViajeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("CreadoPor");
 
                     b.Navigation("RevisadoPor");
+
+                    b.Navigation("Viaje");
+                });
+
+            modelBuilder.Entity("LogisticaBackend.Domain.Entities.Traslado", b =>
+                {
+                    b.HasOne("LogisticaBackend.Domain.Entities.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("RegistradoPorUsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("LogisticaBackend.Domain.Entities.Viaje", "Viaje")
+                        .WithMany("Traslados")
+                        .HasForeignKey("ViajeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Viaje");
+                });
+
+            modelBuilder.Entity("LogisticaBackend.Domain.Entities.Viaje", b =>
+                {
+                    b.HasOne("LogisticaBackend.Domain.Entities.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("AprobadoPorUsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("LogisticaBackend.Domain.Entities.Conductor", "Conductor")
+                        .WithMany()
+                        .HasForeignKey("ConductorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LogisticaBackend.Domain.Entities.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("CreadoPorUsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("LogisticaBackend.Domain.Entities.Vehiculo", "Vehiculo")
+                        .WithMany()
+                        .HasForeignKey("VehiculoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Conductor");
+
+                    b.Navigation("Vehiculo");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
@@ -631,6 +1192,13 @@ namespace LogisticaBackend.Data.Migrations
             modelBuilder.Entity("LogisticaBackend.Domain.Entities.PlanillaViaje", b =>
                 {
                     b.Navigation("Gastos");
+                });
+
+            modelBuilder.Entity("LogisticaBackend.Domain.Entities.Viaje", b =>
+                {
+                    b.Navigation("Planilla");
+
+                    b.Navigation("Traslados");
                 });
 #pragma warning restore 612, 618
         }

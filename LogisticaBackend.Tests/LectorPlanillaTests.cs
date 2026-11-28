@@ -81,7 +81,8 @@ public class LectorPlanillaTests
         {
             ("PORCENTAJE", null, 697_600m, "PORCENTAJE"),
             ("PEAJES", null, 32_900m, "PEAJES"),
-            ("COMISION", "2 codos vigias", 30_000m, "COMISION"),
+            // Bloque 6 (fase 1): COMISION ya no conserva su categoría fija; "2 codos vigias" cae en Otros.
+            ("COMISION", "2 codos vigias", 30_000m, "OTROS"),
             ("ASEO", "Esparrago y Sacada de otro reventado", 48_000m, "OTROS"),
             ("", "arreglo y puesta de luces", 42_000m, "OTROS"),
             ("OBSERVACIONES", "farola luz stop Cabezote", 119_000m, "OTROS"),
@@ -172,7 +173,7 @@ public class LectorPlanillaTests
     }
 
     [Theory]
-    [InlineData("COMISION", "2 codos vigias", "COMISION")]       // regla 4: categoría fija
+    [InlineData("COMISION", "2 codos vigias", "OTROS")]          // bloque 6: ya no es categoría fija, cae en regla 2
     [InlineData("PEAJES", "plumilla", "PEAJES")]
     [InlineData("ASEO", "Esparrago y sacada", "OTROS")]         // regla 2: fila reutilizada
     [InlineData("ACPM / COMBUSTIBLE", "Tanqueo diesel", "ACPM")] // regla 1: palabra clave

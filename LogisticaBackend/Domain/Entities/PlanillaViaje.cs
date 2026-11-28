@@ -11,6 +11,10 @@ public class PlanillaViaje
     public string Placa { get; set; } = string.Empty;
     public string Conductor { get; set; } = string.Empty;
     public string? Manifiesto { get; set; }
+
+    /// <summary>Viaje al que pertenece esta planilla. Null en las planillas previas a la fase 1 (sin viaje).</summary>
+    public int? ViajeId { get; set; }
+    public Viaje? Viaje { get; set; }
     public string? EmpresaTransportadora { get; set; }
     public string? Origen { get; set; }
     public string? Destino { get; set; }

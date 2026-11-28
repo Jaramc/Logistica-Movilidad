@@ -46,6 +46,12 @@ public class PlanillaViajeConfiguration : IEntityTypeConfiguration<PlanillaViaje
             .HasColumnName("manifiesto")
             .HasMaxLength(50);
 
+        builder.Property(x => x.ViajeId).HasColumnName("viaje_id");
+        builder.HasOne(x => x.Viaje).WithOne(v => v.Planilla).HasForeignKey<PlanillaViaje>(x => x.ViajeId).OnDelete(DeleteBehavior.Restrict);
+        // NULL no cuenta como duplicado en PostgreSQL: las planillas sin viaje (anteriores a la fase 1)
+        // no chocan entre sí, pero un viaje no puede tener dos planillas.
+        builder.HasIndex(x => x.ViajeId).IsUnique().HasDatabaseName(RestriccionesCatalogos.PlanillaViajeUnica);
+
         builder.Property(x => x.EmpresaTransportadora)
             .HasColumnName("empresa_transportadora")
             .HasMaxLength(150);

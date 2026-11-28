@@ -47,34 +47,6 @@ export interface PlanillaGuardada {
   advertencias?: string[] | null;
 }
 
-export interface SaldoAnterior {
-  conductor: string;
-  /** Con signo: positivo = la empresa le debe al conductor. */
-  saldoAnterior: number;
-  planillaAnteriorId: number | null;
-}
-
-/**
- * Conductores que ya tienen planillas (nombres normalizados, del más reciente al más antiguo).
- * Ruta: GET /api/planillas/conductores
- */
-export async function obtenerConductoresApi(signal?: AbortSignal): Promise<string[]> {
-  const datos = await apiClient<unknown>('/api/planillas/conductores', { method: 'GET', signal });
-  return Array.isArray(datos) ? datos.filter((d): d is string => typeof d === 'string') : [];
-}
-
-/**
- * Saldo anterior que el servidor asignará a la próxima planilla del conductor.
- * Ruta: GET /api/planillas/saldo-anterior?conductor=
- */
-export async function obtenerSaldoAnteriorApi(conductor: string, signal?: AbortSignal): Promise<SaldoAnterior> {
-  const params = new URLSearchParams({ conductor });
-  return await apiClient<SaldoAnterior>(`/api/planillas/saldo-anterior?${params.toString()}`, {
-    method: 'GET',
-    signal,
-  });
-}
-
 /**
  * 2. Guardar Planilla Aprobada en Base de Datos
  * Ruta: POST /api/planillas. No se envían totales: el servidor los calcula.

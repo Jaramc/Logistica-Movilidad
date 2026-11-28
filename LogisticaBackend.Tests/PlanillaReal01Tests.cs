@@ -120,7 +120,9 @@ public class PlanillaReal01Tests
             ("PORCENTAJE", null, 697_600m, "PORCENTAJE"),
             ("PARQUEO", null, 178_000m, "PARQUEO"),
             ("PEAJES", null, 32_900m, "PEAJES"),
-            ("COMISION", "2 codos vigias", 30_000m, "COMISION"),
+            // Bloque 6 (fase 1): COMISION ya no conserva su categoría fija; "2 codos vigias" no
+            // coincide con ningún alias, así que la fila reutilizada cae en Otros.
+            ("COMISION", "2 codos vigias", 30_000m, "OTROS"),
             ("CARGUE", null, 150_000m, "CARGUE"),
             ("DESCARGUE", null, 140_000m, "DESCARGUE"),
             ("ASEO", "Esparrago y Sacada da otro reventado", 48_000m, "OTROS"),

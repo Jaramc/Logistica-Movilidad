@@ -1,10 +1,9 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { 
-  extraerPlanillaOcrApi, 
-  guardarPlanillaApi, 
+import {
+  extraerPlanillaOcrApi,
+  guardarPlanillaApi,
   descargarConsolidadoApi,
-  obtenerHistorialApi,
-  obtenerSaldoAnteriorApi
+  obtenerHistorialApi
 } from './planillasApi';
 import type { GuardarPlanillaDto } from '../features/planillas/schemas/planillaSchema';
 
@@ -126,7 +125,7 @@ describe('planillasApi.ts - Rutas Canónicas del Backend', () => {
       const jsonOcrCrudo = '[{"nombre":"Flete","content":"$ 6.976.800","confidence":0.71}]';
 
       await guardarPlanillaApi({
-        placa: 'WCN410', conductor: 'ANA', origen: 'BOGOTA', destino: 'CALI',
+        viajeId: 10, placa: 'WCN410', origen: 'BOGOTA', destino: 'CALI',
         fechaInicial: '2026-11-01', fechaFinal: '2026-11-02', flete: 6976800, anticipo: 0,
         gastos: [{ concepto: 'PEAJES', valor: 45000 }],
         jsonOcrCrudo,
@@ -160,8 +159,8 @@ describe('planillasApi.ts - Rutas Canónicas del Backend', () => {
       });
 
       const dto: GuardarPlanillaDto = {
+        viajeId: 10,
         placa: 'TLX890',
-        conductor: 'CARLOS PEREZ',
         origen: 'BUENAVENTURA',
         destino: 'MEDELLIN',
         fechaInicial: '2026-11-01',
@@ -184,25 +183,6 @@ describe('planillasApi.ts - Rutas Canónicas del Backend', () => {
       expect(enviado).not.toHaveProperty('saldoTotal');
       expect(enviado).not.toHaveProperty('id');
       expect(res.id).toBe(42);
-    });
-  });
-
-  describe('obtenerSaldoAnteriorApi', () => {
-    it('llama a GET /api/planillas/saldo-anterior con el conductor', async () => {
-      let capturedUrl = '';
-      globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
-        capturedUrl = url;
-        return {
-          ok: true,
-          status: 200,
-          headers: new Headers({ 'content-type': 'application/json' }),
-          json: async () => ({ conductor: 'PEDRO PEREZ', saldoAnterior: -63500, planillaAnteriorId: 3 }),
-        };
-      });
-
-      const r = await obtenerSaldoAnteriorApi('Pedro Perez');
-      expect(capturedUrl).toBe('/api/planillas/saldo-anterior?conductor=Pedro+Perez');
-      expect(r.saldoAnterior).toBe(-63500);
     });
   });
 

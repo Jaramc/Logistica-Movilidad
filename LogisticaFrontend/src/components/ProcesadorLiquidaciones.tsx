@@ -1,20 +1,19 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useForm, useWatch, type FieldErrors } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQuery } from '@tanstack/react-query';
 import {
   PlanillaFormSchema,
   type PlanillaFormData,
   type GuardarPlanillaDto,
   type SaldoDeclarado,
   conceptoDeGasto,
-  normalizarPlaca
 } from '../features/planillas/schemas/planillaSchema';
 import { calcularLiquidacionEconomica, describirSaldo, formatCOP, toApiDecimalNumber } from '../features/planillas/utils/money';
 import { SaldosDeclarados as BloqueSaldosDeclarados } from '../features/planillas/components/SaldosDeclarados';
 import Big from 'big.js';
-import { useSaldoAnterior } from '../features/planillas/hooks/useSaldoAnterior';
-import { useConductores } from '../features/planillas/hooks/useConductores';
-import { resolverConductor } from '../features/planillas/utils/conductor';
+import { obtenerViaje } from '../features/viajes/viajesApi';
+import { obtenerConductor } from '../features/conductores/conductoresApi';
 import { resumirErrores } from '../features/planillas/utils/erroresFormulario';
 import { hoyLocalISO } from '../lib/fechas';
 import { usePlanillaExtraccion } from '../features/planillas/hooks/usePlanillaExtraccion';
@@ -40,22 +39,35 @@ export interface SaldosDeclarados {
   saldoNuevo: SaldoDeclarado | null;
 }
 
-export default function ProcesadorLiquidaciones() {
+export interface ProcesadorLiquidacionesProps {
+  /** El conductor y la placa del viaje no se editan: salen de este viaje. */
+  viajeId: number;
+  onGuardado?: () => void;
+}
+
+export default function ProcesadorLiquidaciones({ viajeId, onGuardado }: ProcesadorLiquidacionesProps) {
+  const { data: viaje } = useQuery({ queryKey: ['viajes', 'detalle', viajeId], queryFn: () => obtenerViaje(viajeId) });
+  const { data: conductor } = useQuery({
+    queryKey: ['conductores', viaje?.conductorId],
+    queryFn: () => obtenerConductor(viaje!.conductorId),
+    enabled: !!viaje,
+  });
+  // El saldo anterior ya no se encadena por nombre: es el saldo actual de la cuenta del conductor.
+  const saldoAnteriorReal = conductor?.saldo ?? null;
+
   const [estado, setEstado] = useState<EstadoFlujo>('idle');
   const [archivo, setArchivo] = useState<File | null>(null);
   const [tabActiva, setTabActiva] = useState<'gastos' | 'viaje'>('gastos');
   // Lo que devolvió el OCR y no va en el formulario: se reenvía (jsonOcrCrudo) o se muestra al revisor.
   const [jsonOcrCrudo, setJsonOcrCrudo] = useState<string | null>(null);
+  const [placaLeidaPorOcr, setPlacaLeidaPorOcr] = useState<string | null>(null);
   const [camposNoEncontrados, setCamposNoEncontrados] = useState<string[]>([]);
   const [confianzaPromedio, setConfianzaPromedio] = useState<number | null>(null);
   const [declarados, setDeclarados] = useState<SaldosDeclarados | null>(null);
   const [advertenciasOcr, setAdvertenciasOcr] = useState<string[]>([]);
   const [revisoDiferencias, setRevisoDiferencias] = useState(false);
-  // Primera planilla del conductor en el sistema: usar el saldo anterior escrito como saldo inicial.
-  const [usarSaldoInicial, setUsarSaldoInicial] = useState(true);
   // Campos con error al intentar aprobar (pueden estar en la otra pestaña).
   const [camposConError, setCamposConError] = useState<string[]>([]);
-  const conductoresConocidos = useConductores();
 
   const reviewHeadingRef = useRef<HTMLHeadingElement>(null);
 
@@ -63,8 +75,6 @@ export default function ProcesadorLiquidaciones() {
   const form = useForm<PlanillaFormData>({
     resolver: zodResolver(PlanillaFormSchema),
     defaultValues: {
-      placa: '',
-      conductor: '',
       origen: '',
       destino: '',
       fechaInicial: hoyLocalISO(),
@@ -92,25 +102,14 @@ export default function ProcesadorLiquidaciones() {
   const gastosVal = formValores?.detalleGastos ?? ARRAY_VACIO_GASTOS;
   const saldoAnteriorVal = formValores?.saldoAnterior ?? 0;
 
-  // El saldo anterior lo asigna el servidor (SaldoTotal de la última planilla del conductor): se
-  // consulta para mostrar el cálculo real antes de aprobar y compararlo con el escrito en papel.
-  const {
-    saldoAnterior: saldoAnteriorServidor,
-    planillaAnteriorId,
-    consultado: saldoConsultado,
-  } = useSaldoAnterior(formValores?.conductor);
-  const saldoAnteriorDeclarado = declarados?.saldoAnterior ?? null;
-  // Sin planillas previas del conductor el sistema arrancaría en 0: se ofrece tomar el saldo escrito.
-  const esPrimeraPlanilla = saldoConsultado && planillaAnteriorId === null && saldoAnteriorDeclarado !== null;
-  const aplicaSaldoInicial = esPrimeraPlanilla && usarSaldoInicial;
-  const saldoAnteriorEfectivo = aplicaSaldoInicial ? saldoAnteriorDeclarado!.valor : saldoAnteriorServidor;
   useEffect(() => {
     if (estado === 'guardado') return;
-    form.setValue('saldoAnterior', saldoAnteriorEfectivo ?? 0, { shouldDirty: false });
-  }, [saldoAnteriorEfectivo, estado, form]);
+    form.setValue('saldoAnterior', saldoAnteriorReal ?? 0, { shouldDirty: false });
+  }, [saldoAnteriorReal, estado, form]);
+
+  const saldoAnteriorDeclarado = declarados?.saldoAnterior ?? null;
   const difiereSaldoAnterior =
-    !esPrimeraPlanilla &&
-    saldoAnteriorServidor !== null && saldoAnteriorDeclarado !== null && saldoAnteriorServidor !== saldoAnteriorDeclarado.valor;
+    saldoAnteriorReal !== null && saldoAnteriorDeclarado !== null && saldoAnteriorReal !== saldoAnteriorDeclarado.valor;
 
   const calculo = useMemo(() => {
     return calcularLiquidacionEconomica(
@@ -152,6 +151,7 @@ export default function ProcesadorLiquidaciones() {
 
       if (data) {
         setJsonOcrCrudo(data.jsonOcrCrudo);
+        setPlacaLeidaPorOcr(data.placa || null);
         setCamposNoEncontrados(data.camposNoEncontrados);
         setConfianzaPromedio(data.confianzaPromedio);
         setAdvertenciasOcr(data.advertencias);
@@ -163,11 +163,6 @@ export default function ProcesadorLiquidaciones() {
         });
 
         resetForm({
-          placa: data.placa || '',
-          // El OCR solo trae el nombre escrito en los saldos ("Pedro"): se completa con el conductor conocido.
-          conductor: data.conductor
-            ? resolverConductor(data.conductor, conductoresConocidos)
-            : form.getValues('conductor') || '',
           origen: data.origen || '',
           destino: data.destino || '',
           fechaInicial: data.fechaInicial ?? form.getValues('fechaInicial'),
@@ -198,8 +193,7 @@ export default function ProcesadorLiquidaciones() {
   // Guardar en Base de Datos (Mapeo estricto con DTO Whitelist)
   const onGuardarAprobado = async (data: PlanillaFormData) => {
     const payload: GuardarPlanillaDto = {
-      placa: normalizarPlaca(data.placa),
-      conductor: data.conductor,
+      viajeId,
       origen: data.origen,
       destino: data.destino,
       fechaInicial: data.fechaInicial,
@@ -215,18 +209,19 @@ export default function ProcesadorLiquidaciones() {
         descripcion: g.descripcion.trim() || null,
         categoria: g.categoria,
       })),
+      placa: placaLeidaPorOcr,
       jsonOcrCrudo,
       totalGastosDeclarado: declarados?.totalGastos ?? null,
       saldoViajeDeclarado: declarados?.saldoViaje?.valor ?? null,
       saldoAnteriorDeclarado: declarados?.saldoAnterior?.valor ?? null,
       saldoNuevoDeclarado: declarados?.saldoNuevo?.valor ?? null,
-      usarSaldoAnteriorDeclarado: aplicaSaldoInicial,
     };
     setCamposConError([]);
 
     try {
       await guardar(payload);
       setEstado('guardado');
+      onGuardado?.();
     } catch {
       // Error manejado en errorGuardado
     }
@@ -242,12 +237,12 @@ export default function ProcesadorLiquidaciones() {
 
   const limpiarDatosOcr = () => {
     setJsonOcrCrudo(null);
+    setPlacaLeidaPorOcr(null);
     setCamposNoEncontrados([]);
     setConfianzaPromedio(null);
     setDeclarados(null);
     setAdvertenciasOcr([]);
     setRevisoDiferencias(false);
-    setUsarSaldoInicial(true);
     setCamposConError([]);
   };
 
@@ -273,9 +268,11 @@ export default function ProcesadorLiquidaciones() {
             >
               Digitalización de Planillas de Gastos
             </h2>
-            <p className="text-sm text-slate-500 mt-1">
-              Extracción inteligente con Azure AI Document Intelligence y validación contable asistida.
-            </p>
+            {viaje && (
+              <p className="text-sm text-slate-500 mt-1" data-testid="cabecera-viaje">
+                Viaje de <strong>{viaje.conductorCodigo} · {viaje.conductorNombre}</strong> en <strong>{viaje.placa}</strong>
+              </p>
+            )}
           </div>
 
           {estado !== 'idle' && (
@@ -308,7 +305,7 @@ export default function ProcesadorLiquidaciones() {
             saldoAnterior={declarados.saldoAnterior}
             saldoNuevo={declarados.saldoNuevo}
             calculo={calculo}
-            saldoAnteriorServidor={saldoAnteriorEfectivo}
+            saldoAnteriorServidor={saldoAnteriorReal}
           />
         )}
       </div>
@@ -369,7 +366,7 @@ export default function ProcesadorLiquidaciones() {
             Analizando planilla con Azure Document Intelligence...
           </h3>
           <p className="text-sm text-slate-500 max-w-md">
-            Identificando placa, flete, anticipo y renglones dinámicos de gastos del comprobante.
+            Identificando flete, anticipo y renglones dinámicos de gastos del comprobante.
           </p>
         </div>
       )}
@@ -401,28 +398,9 @@ export default function ProcesadorLiquidaciones() {
 
             {difiereSaldoAnterior && estado !== 'guardado' && (
               <div className="px-5 py-2 text-xs border-b border-amber-200 bg-amber-50 text-amber-900" role="status" data-testid="aviso-saldo-anterior">
-                El saldo anterior escrito en la planilla ({describirSaldo(saldoAnteriorDeclarado!.valor)}) difiere del que
-                asigna el sistema ({describirSaldo(saldoAnteriorServidor!)}). Se guardará el del sistema.
+                El saldo anterior escrito en la planilla ({describirSaldo(saldoAnteriorDeclarado!.valor)}) difiere del saldo
+                actual del conductor ({describirSaldo(saldoAnteriorReal!)}). Se guardará el saldo real.
               </div>
-            )}
-
-            {esPrimeraPlanilla && estado !== 'guardado' && (
-              <label
-                className="flex items-start gap-2 px-5 py-2 text-xs border-b border-blue-200 bg-blue-50 text-blue-900 cursor-pointer"
-                data-testid="opcion-saldo-inicial"
-              >
-                <input
-                  type="checkbox"
-                  checked={usarSaldoInicial}
-                  onChange={(e) => setUsarSaldoInicial(e.target.checked)}
-                  className="mt-0.5"
-                />
-                <span>
-                  <strong>Primera planilla de este conductor en el sistema.</strong> Usar el saldo anterior escrito en
-                  papel ({describirSaldo(saldoAnteriorDeclarado!.valor)}) como saldo inicial. Si lo desmarcas, su cuenta
-                  arranca en $0.
-                </span>
-              </label>
             )}
 
             {camposConError.length > 0 && estado !== 'guardado' && (
@@ -463,9 +441,7 @@ export default function ProcesadorLiquidaciones() {
 
             <div className="p-5 sm:p-6 flex-1 overflow-y-auto">
               {tabActiva === 'gastos' && <GastosTable control={form.control} />}
-              {tabActiva === 'viaje' && (
-                <DatosViajeForm form={form} camposNoEncontrados={camposNoEncontrados} conductoresConocidos={conductoresConocidos} />
-              )}
+              {tabActiva === 'viaje' && <DatosViajeForm form={form} camposNoEncontrados={camposNoEncontrados} />}
             </div>
 
             {/* Advertencias del OCR y diferencias por revisar antes de aprobar */}

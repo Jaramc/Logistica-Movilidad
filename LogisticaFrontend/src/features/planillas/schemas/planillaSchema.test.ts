@@ -64,10 +64,8 @@ describe('planillaSchema.ts - Contratos Zod y Validación en el Borde', () => {
   });
 
   describe('PlanillaFormSchema', () => {
-    it('valida datos correctos del formulario', () => {
+    it('valida datos correctos del formulario (sin placa ni conductor: vienen del viaje)', () => {
       const formData = {
-        placa: 'WCN452',
-        conductor: 'Carlos Mendoza',
         origen: 'Buenaventura',
         destino: 'Medellín',
         fechaInicial: '2026-11-01',
@@ -86,11 +84,9 @@ describe('planillaSchema.ts - Contratos Zod y Validación en el Borde', () => {
       expect(parsed.success).toBe(true);
     });
 
-    it('rechaza placa con menos de 3 caracteres', () => {
+    it('rechaza origen con menos de 2 caracteres', () => {
       const invalido = {
-        placa: 'AB',
-        conductor: 'Juan',
-        origen: 'Cali',
+        origen: 'C',
         destino: 'Bogota',
         fechaInicial: '2026-11-01',
         fechaFinal: '2026-11-02',
@@ -108,20 +104,16 @@ describe('planillaSchema.ts - Contratos Zod y Validación en el Borde', () => {
   });
 
   describe('GuardarPlanillaDtoSchema', () => {
-    it('valida el DTO de guardado para la base de datos', () => {
+    it('valida el DTO de guardado para la base de datos (viajeId obligatorio, sin conductor)', () => {
       const dto = {
+        viajeId: 10,
         placa: 'WCN452',
-        conductor: 'Carlos Mendoza',
         origen: 'Buenaventura',
         destino: 'Medellín',
         fechaInicial: '2026-11-01',
         fechaFinal: '2026-11-03',
         flete: 5000000,
         anticipo: 2000000,
-        totalGastos: 1500000,
-        saldoViaje: -500000,
-        saldoAnterior: 0,
-        saldoTotal: -500000,
         gastos: [
           { concepto: 'ACPM', valor: 1200000 },
           { concepto: 'Peajes', valor: 300000 },
@@ -135,7 +127,7 @@ describe('planillaSchema.ts - Contratos Zod y Validación en el Borde', () => {
 
   describe('PlanillaFormSchema — reglas de la planilla real', () => {
     const base = {
-      placa: 'STW514', conductor: 'Pedro', origen: 'Buenaventura', destino: 'Medellín',
+      origen: 'Buenaventura', destino: 'Medellín',
       fechaInicial: '2026-06-13', fechaFinal: '2026-06-19', manifiesto: '', empresaTransportadora: 'Cliente Ejemplo',
       flete: 6976800, anticipo: 2800000, saldoAnterior: 0,
       detalleGastos: [{ id: '1', etiqueta: 'PEAJES', descripcion: '', categoria: 'PEAJES' as const, valor: 32900 }],
@@ -145,14 +137,8 @@ describe('planillaSchema.ts - Contratos Zod y Validación en el Borde', () => {
       return r.success ? [] : r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
     };
 
-    it('acepta la planilla válida y placas con espacio o guion', () => {
+    it('acepta la planilla válida', () => {
       expect(errores({})).toEqual([]);
-      expect(errores({ placa: 'stw 514' })).toEqual([]);
-      expect(errores({ placa: 'STW-514' })).toEqual([]);
-    });
-
-    it.each(['514', 'S14', 'WCN4100', 'ABCDEF'])('rechaza la placa %s', (placa) => {
-      expect(errores({ placa })[0]).toMatch(/^placa: La placa debe tener 3 letras y 3 números/);
     });
 
     it.each(['0', '123', '$ -', 'A'])('rechaza la empresa sin letras: %s', (empresaTransportadora) => {

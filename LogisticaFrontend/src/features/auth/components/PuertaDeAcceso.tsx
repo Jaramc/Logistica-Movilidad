@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Navbar } from '../../../components/Navbar';
-import ProcesadorLiquidaciones from '../../../components/ProcesadorLiquidaciones';
 import { HistorialLiquidaciones } from '../../../components/HistorialLiquidaciones';
 import { ErrorBoundary } from '../../../components/ErrorBoundary';
 import { useSesion } from '../sesionContext';
@@ -10,6 +9,9 @@ import { Configurar2faPage } from './Configurar2faPage';
 import { CambiarPasswordPage } from './CambiarPasswordPage';
 import { UsuariosPage } from '../../usuarios/UsuariosPage';
 import { AuditoriaPage } from '../../auditoria/AuditoriaPage';
+import { ViajesPage } from '../../viajes/ViajesPage';
+import { ConductoresPage } from '../../conductores/ConductoresPage';
+import { VehiculosPage } from '../../vehiculos/VehiculosPage';
 
 /** Aplicación ya autenticada (sesión con 2FA y contraseña definitiva). */
 function AplicacionAutenticada() {
@@ -35,7 +37,9 @@ function AplicacionAutenticada() {
 
       <main className="flex-1">
         <ErrorBoundary fallbackTitle="Error en el módulo de liquidaciones">
-          {vistaActiva === 'procesador' && <ProcesadorLiquidaciones />}
+          {vistaActiva === 'viajes' && <ViajesPage />}
+          {vistaActiva === 'conductores' && <ConductoresPage />}
+          {vistaActiva === 'vehiculos' && <VehiculosPage />}
           {vistaActiva === 'historial' && <HistorialLiquidaciones puedeDescargar={puedeDescargarConsolidado(usuario)} />}
           {vistaActiva === 'usuarios' && <UsuariosPage />}
           {vistaActiva === 'auditoria' && <AuditoriaPage />}
