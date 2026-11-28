@@ -248,6 +248,11 @@ public class ViajesIntegracionTests
             estados.ShouldBe(new[] { HttpStatusCode.OK, HttpStatusCode.Conflict },
                 string.Join(" | ", await Task.WhenAll(respuestas.Select(x => x.Content.ReadAsStringAsync()))));
 
+            // El perdedor debe chocar por xmin (no por "El viaje ya fue aprobado").
+            var conflicto = respuestas.Single(x => x.StatusCode == HttpStatusCode.Conflict);
+            (await conflicto.JsonAsync()).GetProperty("detail").GetString()
+                .ShouldBe("El registro fue modificado por otra persona. Recarga e intenta de nuevo.");
+
             var cierres = await Sembrador.EnScopeAsync(_fabrica, sp =>
                 sp.GetRequiredService<AppDbContext>().MovimientosSaldo
                     .CountAsync(m => m.ViajeId == viajeId && m.Tipo == TipoMovimientoSaldo.CierreViaje));
