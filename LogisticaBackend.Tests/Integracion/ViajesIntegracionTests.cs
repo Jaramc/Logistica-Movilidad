@@ -240,9 +240,20 @@ public class ViajesIntegracionTests
             await revisor.PedirTokenCsrfAsync();
             await otroRevisor.PedirTokenCsrfAsync();
 
-            var respuestas = await Task.WhenAll(
-                revisor.PostAsync($"/api/viajes/{viajeId}/aprobar"),
-                otroRevisor.PostAsync($"/api/viajes/{viajeId}/aprobar"));
+            // Ambas leen el viaje antes de que cualquiera tome el bloqueo del conductor y escriba.
+            HttpResponseMessage[] respuestas;
+            _fabrica.BarreraBloqueo.Armar(solicitudes: 2);
+            try
+            {
+                respuestas = await Task.WhenAll(
+                    revisor.PostAsync($"/api/viajes/{viajeId}/aprobar"),
+                    otroRevisor.PostAsync($"/api/viajes/{viajeId}/aprobar"));
+            }
+            finally
+            {
+                _fabrica.BarreraBloqueo.Desarmar();
+            }
+            _fabrica.BarreraBloqueo.Llegadas.ShouldBe(2, "La barrera no retuvo las dos aprobaciones; la prueba dependería del tiempo.");
 
             var estados = respuestas.Select(x => x.StatusCode).OrderBy(x => x).ToArray();
             estados.ShouldBe(new[] { HttpStatusCode.OK, HttpStatusCode.Conflict },
