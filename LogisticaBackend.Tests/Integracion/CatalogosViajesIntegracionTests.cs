@@ -26,10 +26,15 @@ public class CatalogosViajesIntegracionTests
     {
         // La fábrica ya migró la base al arrancar (AplicarMigraciones=true); si la migración
         // CatalogosViajesYSaldos no aplicara limpio, ninguna prueba de la colección arrancaría.
+        // La base es compartida por toda la colección: solo se verifica que las 4 están presentes,
+        // no que sean las únicas (otras pruebas siembran sus propios vehículos de prueba).
         var placas = await Sembrador.EnScopeAsync(_fabrica, sp => sp.GetRequiredService<AppDbContext>()
-            .Vehiculos.AsNoTracking().Select(v => v.Placa).OrderBy(p => p).ToListAsync());
+            .Vehiculos.AsNoTracking().Select(v => v.Placa).ToListAsync());
 
-        placas.ShouldBe(new[] { "JYP052", "JYP108", "NNN977", "STW514" });
+        placas.ShouldContain("JYP052");
+        placas.ShouldContain("JYP108");
+        placas.ShouldContain("NNN977");
+        placas.ShouldContain("STW514");
     }
 
     [Fact]
