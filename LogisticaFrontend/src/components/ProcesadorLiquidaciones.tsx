@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useForm, useWatch } from 'react-hook-form';
+import { useForm, useWatch, type FieldErrors } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   PlanillaFormSchema,
@@ -13,6 +13,9 @@ import { calcularLiquidacionEconomica, describirSaldo, formatCOP, toApiDecimalNu
 import { SaldosDeclarados as BloqueSaldosDeclarados } from '../features/planillas/components/SaldosDeclarados';
 import Big from 'big.js';
 import { useSaldoAnterior } from '../features/planillas/hooks/useSaldoAnterior';
+import { useConductores } from '../features/planillas/hooks/useConductores';
+import { resolverConductor } from '../features/planillas/utils/conductor';
+import { resumirErrores } from '../features/planillas/utils/erroresFormulario';
 import { hoyLocalISO } from '../lib/fechas';
 import { usePlanillaExtraccion } from '../features/planillas/hooks/usePlanillaExtraccion';
 import { useGuardarPlanilla } from '../features/planillas/hooks/useGuardarPlanilla';
@@ -48,6 +51,11 @@ export default function ProcesadorLiquidaciones() {
   const [declarados, setDeclarados] = useState<SaldosDeclarados | null>(null);
   const [advertenciasOcr, setAdvertenciasOcr] = useState<string[]>([]);
   const [revisoDiferencias, setRevisoDiferencias] = useState(false);
+  // Primera planilla del conductor en el sistema: usar el saldo anterior escrito como saldo inicial.
+  const [usarSaldoInicial, setUsarSaldoInicial] = useState(true);
+  // Campos con error al intentar aprobar (pueden estar en la otra pestaña).
+  const [camposConError, setCamposConError] = useState<string[]>([]);
+  const conductoresConocidos = useConductores();
 
   const reviewHeadingRef = useRef<HTMLHeadingElement>(null);
 
@@ -86,13 +94,22 @@ export default function ProcesadorLiquidaciones() {
 
   // El saldo anterior lo asigna el servidor (SaldoTotal de la última planilla del conductor): se
   // consulta para mostrar el cálculo real antes de aprobar y compararlo con el escrito en papel.
-  const { saldoAnterior: saldoAnteriorServidor } = useSaldoAnterior(formValores?.conductor);
+  const {
+    saldoAnterior: saldoAnteriorServidor,
+    planillaAnteriorId,
+    consultado: saldoConsultado,
+  } = useSaldoAnterior(formValores?.conductor);
+  const saldoAnteriorDeclarado = declarados?.saldoAnterior ?? null;
+  // Sin planillas previas del conductor el sistema arrancaría en 0: se ofrece tomar el saldo escrito.
+  const esPrimeraPlanilla = saldoConsultado && planillaAnteriorId === null && saldoAnteriorDeclarado !== null;
+  const aplicaSaldoInicial = esPrimeraPlanilla && usarSaldoInicial;
+  const saldoAnteriorEfectivo = aplicaSaldoInicial ? saldoAnteriorDeclarado!.valor : saldoAnteriorServidor;
   useEffect(() => {
     if (estado === 'guardado') return;
-    form.setValue('saldoAnterior', saldoAnteriorServidor ?? 0, { shouldDirty: false });
-  }, [saldoAnteriorServidor, estado, form]);
-  const saldoAnteriorDeclarado = declarados?.saldoAnterior ?? null;
+    form.setValue('saldoAnterior', saldoAnteriorEfectivo ?? 0, { shouldDirty: false });
+  }, [saldoAnteriorEfectivo, estado, form]);
   const difiereSaldoAnterior =
+    !esPrimeraPlanilla &&
     saldoAnteriorServidor !== null && saldoAnteriorDeclarado !== null && saldoAnteriorServidor !== saldoAnteriorDeclarado.valor;
 
   const calculo = useMemo(() => {
@@ -147,7 +164,10 @@ export default function ProcesadorLiquidaciones() {
 
         resetForm({
           placa: data.placa || '',
-          conductor: data.conductor || form.getValues('conductor') || '',
+          // El OCR solo trae el nombre escrito en los saldos ("Pedro"): se completa con el conductor conocido.
+          conductor: data.conductor
+            ? resolverConductor(data.conductor, conductoresConocidos)
+            : form.getValues('conductor') || '',
           origen: data.origen || '',
           destino: data.destino || '',
           fechaInicial: data.fechaInicial ?? form.getValues('fechaInicial'),
@@ -200,7 +220,9 @@ export default function ProcesadorLiquidaciones() {
       saldoViajeDeclarado: declarados?.saldoViaje?.valor ?? null,
       saldoAnteriorDeclarado: declarados?.saldoAnterior?.valor ?? null,
       saldoNuevoDeclarado: declarados?.saldoNuevo?.valor ?? null,
+      usarSaldoAnteriorDeclarado: aplicaSaldoInicial,
     };
+    setCamposConError([]);
 
     try {
       await guardar(payload);
@@ -210,6 +232,14 @@ export default function ProcesadorLiquidaciones() {
     }
   };
 
+  // Si falta un dato en la pestaña que no se ve, el botón "parecía no hacer nada": se cambia de
+  // pestaña y se listan los campos pendientes.
+  const onFormularioInvalido = (errores: FieldErrors<PlanillaFormData>) => {
+    const { pestana, campos } = resumirErrores(errores);
+    setCamposConError(campos);
+    setTabActiva(pestana);
+  };
+
   const limpiarDatosOcr = () => {
     setJsonOcrCrudo(null);
     setCamposNoEncontrados([]);
@@ -217,6 +247,8 @@ export default function ProcesadorLiquidaciones() {
     setDeclarados(null);
     setAdvertenciasOcr([]);
     setRevisoDiferencias(false);
+    setUsarSaldoInicial(true);
+    setCamposConError([]);
   };
 
   const reiniciarProceso = () => {
@@ -276,7 +308,7 @@ export default function ProcesadorLiquidaciones() {
             saldoAnterior={declarados.saldoAnterior}
             saldoNuevo={declarados.saldoNuevo}
             calculo={calculo}
-            saldoAnteriorServidor={saldoAnteriorServidor}
+            saldoAnteriorServidor={saldoAnteriorEfectivo}
           />
         )}
       </div>
@@ -344,7 +376,7 @@ export default function ProcesadorLiquidaciones() {
 
       {/* Flujo: Pantalla de Revisión Dividida (Split Screen en Desktop) */}
       {(estado === 'revisando' || estado === 'guardado') && !estaExtrayendo && (
-        <form onSubmit={handleSubmit(onGuardarAprobado)} className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <form onSubmit={handleSubmit(onGuardarAprobado, onFormularioInvalido)} className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Panel Izquierdo: Visor de Documento Original (5 Cols) */}
           <div className="lg:col-span-5 h-[550px] lg:h-[720px] sticky top-20">
             <VisorDocumento archivo={archivo} onCambiarArchivo={reiniciarProceso} />
@@ -371,6 +403,35 @@ export default function ProcesadorLiquidaciones() {
               <div className="px-5 py-2 text-xs border-b border-amber-200 bg-amber-50 text-amber-900" role="status" data-testid="aviso-saldo-anterior">
                 El saldo anterior escrito en la planilla ({describirSaldo(saldoAnteriorDeclarado!.valor)}) difiere del que
                 asigna el sistema ({describirSaldo(saldoAnteriorServidor!)}). Se guardará el del sistema.
+              </div>
+            )}
+
+            {esPrimeraPlanilla && estado !== 'guardado' && (
+              <label
+                className="flex items-start gap-2 px-5 py-2 text-xs border-b border-blue-200 bg-blue-50 text-blue-900 cursor-pointer"
+                data-testid="opcion-saldo-inicial"
+              >
+                <input
+                  type="checkbox"
+                  checked={usarSaldoInicial}
+                  onChange={(e) => setUsarSaldoInicial(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>
+                  <strong>Primera planilla de este conductor en el sistema.</strong> Usar el saldo anterior escrito en
+                  papel ({describirSaldo(saldoAnteriorDeclarado!.valor)}) como saldo inicial. Si lo desmarcas, su cuenta
+                  arranca en $0.
+                </span>
+              </label>
+            )}
+
+            {camposConError.length > 0 && estado !== 'guardado' && (
+              <div
+                className="px-5 py-2 text-xs border-b border-red-200 bg-red-50 text-red-800"
+                role="alert"
+                data-testid="aviso-campos-pendientes"
+              >
+                Para aprobar, completa o corrige: <strong>{camposConError.join(', ')}</strong>.
               </div>
             )}
 
@@ -402,7 +463,9 @@ export default function ProcesadorLiquidaciones() {
 
             <div className="p-5 sm:p-6 flex-1 overflow-y-auto">
               {tabActiva === 'gastos' && <GastosTable control={form.control} />}
-              {tabActiva === 'viaje' && <DatosViajeForm form={form} camposNoEncontrados={camposNoEncontrados} />}
+              {tabActiva === 'viaje' && (
+                <DatosViajeForm form={form} camposNoEncontrados={camposNoEncontrados} conductoresConocidos={conductoresConocidos} />
+              )}
             </div>
 
             {/* Advertencias del OCR y diferencias por revisar antes de aprobar */}

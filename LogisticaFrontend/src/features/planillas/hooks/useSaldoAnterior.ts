@@ -28,6 +28,8 @@ export function useSaldoAnterior(conductor: string | undefined) {
   return {
     saldoAnterior: consulta.data?.saldoAnterior ?? null,
     planillaAnteriorId: consulta.data?.planillaAnteriorId ?? null,
+    /** True cuando el servidor ya respondió para el conductor escrito (planillaAnteriorId null = primera planilla). */
+    consultado: consulta.isSuccess && conductorEstable.length >= 2,
     cargando: consulta.isFetching,
   };
 }

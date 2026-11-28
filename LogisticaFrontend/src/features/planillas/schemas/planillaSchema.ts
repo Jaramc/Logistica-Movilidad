@@ -203,6 +203,8 @@ export const GuardarPlanillaDtoSchema = z.object({
   saldoViajeDeclarado: z.number().nullable().optional(),
   saldoAnteriorDeclarado: z.number().nullable().optional(),
   saldoNuevoDeclarado: z.number().nullable().optional(),
+  /** Solo en la primera planilla del conductor: usar el saldo anterior escrito como saldo inicial. */
+  usarSaldoAnteriorDeclarado: z.boolean().optional(),
 });
 
 export type GuardarPlanillaDto = z.infer<typeof GuardarPlanillaDtoSchema>;

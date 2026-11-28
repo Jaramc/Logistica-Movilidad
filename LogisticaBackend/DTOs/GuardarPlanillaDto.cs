@@ -26,7 +26,11 @@ public record GuardarPlanillaDto(
     decimal? TotalGastosDeclarado = null,
     decimal? SaldoViajeDeclarado = null,
     decimal? SaldoAnteriorDeclarado = null,
-    decimal? SaldoNuevoDeclarado = null
+    decimal? SaldoNuevoDeclarado = null,
+    // Solo para la PRIMERA planilla del conductor en el sistema (no hay saldo del cual encadenar):
+    // el revisor confirma que SaldoAnteriorDeclarado es el saldo inicial. Si el conductor ya tiene
+    // planillas se ignora y manda el SaldoTotal de la última.
+    bool UsarSaldoAnteriorDeclarado = false
 );
 
 /// <summary>

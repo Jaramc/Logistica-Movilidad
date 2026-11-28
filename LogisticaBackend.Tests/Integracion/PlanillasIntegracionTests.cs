@@ -240,6 +240,48 @@ public class PlanillasIntegracionTests
     }
 
     [Fact]
+    public async Task PlanillaReal01_PrimeraDelConductor_ConSaldoInicial_CierraEn5700YQuedaEnLaListaDeConductores()
+    {
+        var ocr = await PlanillaReal01.ProcesarAsync();
+        var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
+        using (cliente)
+        {
+            var conductor = "PEDRO INICIAL " + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+            var r = await cliente.PostAsync("/api/planillas", new
+            {
+                placa = "STW514", conductor, origen = ocr.Origen, destino = ocr.Destino,
+                fechaInicial = ocr.FechaInicial, fechaFinal = ocr.FechaFinal,
+                empresaTransportadora = ocr.EmpresaTransportadora, flete = ocr.Flete, anticipo = ocr.Anticipo,
+                // El revisor corrigió PEAJES a 82.900: ahora la suma da el total escrito (2.869.200).
+                gastos = ocr.DetalleGastos.Select(g => new
+                {
+                    concepto = g.Concepto, valor = g.Etiqueta == "PEAJES" ? 82_900m : g.Valor,
+                    etiqueta = g.Etiqueta == "" ? null : g.Etiqueta, descripcion = g.Descripcion, categoria = g.CategoriaPropuesta,
+                }),
+                totalGastosDeclarado = ocr.TotalGastosDeclarado,
+                saldoViajeDeclarado = ocr.SaldoViajeDeclarado?.Valor,
+                saldoAnteriorDeclarado = ocr.SaldoAnteriorDeclarado?.Valor,
+                saldoNuevoDeclarado = ocr.SaldoNuevoDeclarado?.Valor,
+                usarSaldoAnteriorDeclarado = true,
+            });
+            r.StatusCode.ShouldBe(HttpStatusCode.Created, await r.Content.ReadAsStringAsync());
+            var data = (await r.JsonAsync()).GetProperty("data");
+            data.GetProperty("totalGastos").GetDecimal().ShouldBe(2_869_200m);
+            data.GetProperty("saldoAnterior").GetDecimal().ShouldBe(-63_500m);
+            data.GetProperty("saldoViaje").GetDecimal().ShouldBe(69_200m);
+            data.GetProperty("saldoTotal").GetDecimal().ShouldBe(5_700m);   // igual al "saldo nuevo" escrito
+            data.GetProperty("tieneDiferencias").GetBoolean().ShouldBeFalse();
+
+            // La próxima planilla del conductor arranca desde 5.700, no desde 0.
+            var saldo = await (await cliente.Http.GetAsync($"/api/planillas/saldo-anterior?conductor={Uri.EscapeDataString(conductor)}")).JsonAsync();
+            saldo.GetProperty("saldoAnterior").GetDecimal().ShouldBe(5_700m);
+
+            var conductores = await (await cliente.Http.GetAsync("/api/planillas/conductores")).JsonAsync();
+            conductores.EnumerateArray().Select(c => c.GetString()).ShouldContain(conductor);
+        }
+    }
+
+    [Fact]
     public async Task Guardar_ConValoresDeclarados_LosPersisteYMarcaDiferencias()
     {
         var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);

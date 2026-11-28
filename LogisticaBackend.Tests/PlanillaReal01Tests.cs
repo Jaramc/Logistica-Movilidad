@@ -163,6 +163,18 @@ public class PlanillaReal01Tests
     }
 
     [Fact]
+    public async Task Conductor_SePoneElNombreEscritoEnLosSaldos_ConAdvertencia()
+    {
+        var p = await PlanillaReal01.ProcesarAsync();
+
+        // El modelo no tiene campo Conductor; en la planilla aparece como "69.200 Pedro".
+        p.Conductor.ShouldBe("Pedro");
+        p.Advertencias!.ShouldContain(a => a.StartsWith("Conductor tomado del nombre escrito en los saldos («Pedro»)"));
+        // Los saldos traían "Empresa" y "Pedro": no hubo que deducir la dirección.
+        p.Advertencias!.ShouldNotContain(a => a.Contains("se dedujo de las sumas"));
+    }
+
+    [Fact]
     public async Task JsonOcrCrudo_GuardaLoLeidoDeLaTablaSinElResultadoCompleto()
     {
         var p = await PlanillaReal01.ProcesarAsync();

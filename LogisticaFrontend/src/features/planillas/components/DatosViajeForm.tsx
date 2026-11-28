@@ -9,12 +9,16 @@ export interface DatosViajeFormProps {
   form: UseFormReturn<PlanillaFormData>;
   /** Nombres de campo del modelo OCR ("Placa", "Flete", …) que no se encontraron en la planilla. */
   camposNoEncontrados?: readonly string[];
+  /** Conductores que ya tienen planillas, para sugerirlos al escribir. */
+  conductoresConocidos?: readonly string[];
 }
+
+const ID_LISTA_CONDUCTORES = 'conductores-conocidos';
 
 const CLASE_NO_ENCONTRADO = 'border-amber-400 bg-amber-50 hover:border-amber-500';
 const AYUDA_NO_ENCONTRADO = 'El OCR no encontró este dato: complétalo a mano.';
 
-export const DatosViajeForm: React.FC<DatosViajeFormProps> = ({ form, camposNoEncontrados = [] }) => {
+export const DatosViajeForm: React.FC<DatosViajeFormProps> = ({ form, camposNoEncontrados = [], conductoresConocidos = [] }) => {
   const { register, formState: { errors }, control } = form;
 
   /** Props de resaltado en ámbar para un campo que el OCR no encontró (el error de validación tiene prioridad). */
@@ -53,8 +57,22 @@ export const DatosViajeForm: React.FC<DatosViajeFormProps> = ({ form, camposNoEn
             placeholder="Nombre completo"
             error={errors.conductor?.message}
             leftAddon={<User className="w-4 h-4" />}
+            list={conductoresConocidos.length > 0 ? ID_LISTA_CONDUCTORES : undefined}
+            autoComplete="off"
+            helperText={
+              errors.conductor
+                ? undefined
+                : 'Escríbelo igual que en sus planillas anteriores: el saldo anterior se encadena por nombre.'
+            }
             {...register('conductor')}
           />
+          {conductoresConocidos.length > 0 && (
+            <datalist id={ID_LISTA_CONDUCTORES} data-testid="lista-conductores">
+              {conductoresConocidos.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
+          )}
 
           <Input
             label="Ciudad de Origen"

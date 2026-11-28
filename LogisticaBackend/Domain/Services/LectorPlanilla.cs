@@ -76,7 +76,9 @@ public sealed record PlanillaInterpretada(
     SaldoDeclarado? SaldoNuevoDeclarado,
     IReadOnlyList<GastoLeido> Gastos,
     IReadOnlyList<string> Advertencias,
-    IReadOnlyList<string> CamposNoEncontrados);
+    IReadOnlyList<string> CamposNoEncontrados,
+    /// <summary>Nombre escrito junto a los saldos a favor del conductor ("69.200 Pedro" → "Pedro"). Suele ser solo el nombre de pila.</summary>
+    string? ConductorEnSaldos = null);
 
 /// <summary>
 /// Lee la "PLANILLA DE GASTOS CONDUCTOR" a partir de filas de texto (la tabla de layout que devuelve
@@ -493,6 +495,15 @@ public static partial class LectorPlanilla
         var saldoAnterior = Saldo(Crudo(CampoPlanilla.SaldoAnterior));
         var saldoNuevo = Saldo(Crudo(CampoPlanilla.SaldoNuevo));
 
+        // Si la planilla no dejó legible a favor de quién está algún saldo (pasa con las filas del
+        // modelo custom, que no traen el nombre), se deduce de las sumas cuando hay una sola opción.
+        if (DeducirDireccionSaldos(totalDeclarado, anticipo, ref saldoViaje, ref saldoAnterior, ref saldoNuevo))
+            advertencias.Add("La planilla no indica legible a favor de quién están los saldos: se dedujo de las sumas. Confírmalo.");
+
+        var conductorEnSaldos = NombreEnSaldo(Crudo(CampoPlanilla.SaldoNuevo))
+            ?? NombreEnSaldo(Crudo(CampoPlanilla.SaldoViaje))
+            ?? NombreEnSaldo(Crudo(CampoPlanilla.SaldoAnterior));
+
         var gastos = lectura.Gastos;
         if (gastos.Count == 0) noEncontrados.Add(CampoPlanilla.DetalleGastos);
 
@@ -516,7 +527,68 @@ public static partial class LectorPlanilla
 
         return new PlanillaInterpretada(empresa, origen, destino, fechaInicial, fechaFinal, manifiesto, placa,
             flete, anticipo, totalDeclarado, saldoViaje, saldoAnterior, saldoNuevo,
-            gastos, advertencias, noEncontrados);
+            gastos, advertencias, noEncontrados, conductorEnSaldos);
+    }
+
+    /// <summary>
+    /// Completa el signo de los saldos sin "a favor de" probando las combinaciones que cumplen
+    /// SaldoViaje = Total − Anticipo y SaldoNuevo = SaldoViaje + SaldoAnterior. Solo cambia algo si
+    /// exactamente una combinación cuadra; los saldos que ya traen dirección no se tocan.
+    /// </summary>
+    /// <returns>True si dedujo al menos una dirección.</returns>
+    public static bool DeducirDireccionSaldos(decimal? totalDeclarado, decimal anticipo,
+        ref SaldoDeclarado? viaje, ref SaldoDeclarado? anterior, ref SaldoDeclarado? nuevo)
+    {
+        var sinDireccion = new[] { viaje, anterior, nuevo }.Count(s => s is not null && s.AFavorDe is null);
+        if (sinDireccion == 0) return false;
+
+        static decimal[] Opciones(SaldoDeclarado? s) => s switch
+        {
+            null => new[] { 0m },
+            { AFavorDe: not null } => new[] { s.Valor },
+            _ => s.Valor == 0m ? new[] { 0m } : new[] { Math.Abs(s.Valor), -Math.Abs(s.Valor) },
+        };
+
+        var soluciones = new List<(decimal V, decimal A, decimal N)>();
+        foreach (var v in Opciones(viaje))
+        foreach (var a in Opciones(anterior))
+        foreach (var n in Opciones(nuevo))
+        {
+            var cuadraViaje = viaje is null || totalDeclarado is null || totalDeclarado.Value - anticipo == v;
+            var cuadraNuevo = viaje is null || anterior is null || nuevo is null || v + a == n;
+            // Sin ninguna suma con la que comparar no hay nada que deducir.
+            var hayComparacion = (viaje is not null && totalDeclarado is not null)
+                || (viaje is not null && anterior is not null && nuevo is not null);
+            if (hayComparacion && cuadraViaje && cuadraNuevo) soluciones.Add((v, a, n));
+        }
+        if (soluciones.Count == 0) return false;
+
+        // Cada saldo se fija solo si todas las combinaciones que cuadran le dan el mismo signo.
+        static SaldoDeclarado? Con(SaldoDeclarado? s, IEnumerable<decimal> valores)
+        {
+            var distintos = valores.Distinct().ToList();
+            if (s is null || s.AFavorDe is not null || distintos.Count != 1 || distintos[0] == 0m) return s;
+            var valor = distintos[0];
+            return new SaldoDeclarado(valor, valor > 0m ? AFavorDe.Conductor : AFavorDe.Empresa);
+        }
+        var antes = (viaje, anterior, nuevo);
+        viaje = Con(viaje, soluciones.Select(x => x.V));
+        anterior = Con(anterior, soluciones.Select(x => x.A));
+        nuevo = Con(nuevo, soluciones.Select(x => x.N));
+        return antes != (viaje, anterior, nuevo);
+    }
+
+    /// <summary>"69.200 Pedro" → "Pedro"; "63.500 Empresa", "5.700" o texto sin nombre → null.</summary>
+    public static string? NombreEnSaldo(string? texto)
+    {
+        if (string.IsNullOrWhiteSpace(texto)) return null;
+        var sinMonto = Monto().Replace(texto, " ");
+        var palabras = sinMonto.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+            .Where(p => p.Count(char.IsLetter) >= 3 && p.All(c => char.IsLetter(c) || c is '.' or '-'))
+            .ToList();
+        if (palabras.Count == 0) return null;
+        if (palabras.Any(p => TextoPlanilla.Normalizar(p).StartsWith("EMP", StringComparison.Ordinal))) return null;
+        return TextoPlanilla.Limpiar(string.Join(' ', palabras));
     }
 
     /// <summary>"63.500 Empresa" → -63.500 a favor de la empresa; "69.200 Pedro" → +69.200 a favor del conductor.</summary>

@@ -55,6 +55,15 @@ export interface SaldoAnterior {
 }
 
 /**
+ * Conductores que ya tienen planillas (nombres normalizados, del más reciente al más antiguo).
+ * Ruta: GET /api/planillas/conductores
+ */
+export async function obtenerConductoresApi(signal?: AbortSignal): Promise<string[]> {
+  const datos = await apiClient<unknown>('/api/planillas/conductores', { method: 'GET', signal });
+  return Array.isArray(datos) ? datos.filter((d): d is string => typeof d === 'string') : [];
+}
+
+/**
  * Saldo anterior que el servidor asignará a la próxima planilla del conductor.
  * Ruta: GET /api/planillas/saldo-anterior?conductor=
  */

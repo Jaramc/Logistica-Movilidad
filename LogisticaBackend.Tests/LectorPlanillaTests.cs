@@ -193,6 +193,65 @@ public class LectorPlanillaTests
         LectorPlanilla.Saldo(texto).ShouldBe(new SaldoDeclarado(valor, aFavor));
 
     [Theory]
+    [InlineData("69.200 Pedro", "Pedro")]
+    [InlineData("5.700 Andrés Felipe", "Andrés Felipe")]
+    [InlineData("63.500 Empresa", null)]
+    [InlineData("179.000 Emprisa", null)]
+    [InlineData("5.700", null)]
+    [InlineData("2'869. 200", null)]
+    [InlineData(null, null)]
+    public void NombreEnSaldo_DevuelveElNombreDelConductorSinElMonto(string? texto, string? esperado) =>
+        LectorPlanilla.NombreEnSaldo(texto).ShouldBe(esperado);
+
+    [Fact]
+    public void Interpretar_ProponeElConductorEscritoEnLosSaldos() =>
+        LectorPlanilla.Interpretar(Planilla()).ConductorEnSaldos.ShouldBe("Pedro");
+
+    [Fact]
+    public void DeducirDireccionSaldos_SinAFavorDe_LaDeduceDeLasSumas()
+    {
+        // Filas del modelo custom: los saldos llegan sin el nombre ni "Empresa".
+        SaldoDeclarado? viaje = new(69_200m, null), anterior = new(63_500m, null), nuevo = new(5_700m, null);
+
+        LectorPlanilla.DeducirDireccionSaldos(2_869_200m, 2_800_000m, ref viaje, ref anterior, ref nuevo).ShouldBeTrue();
+
+        viaje.ShouldBe(new SaldoDeclarado(69_200m, AFavorDe.Conductor));
+        anterior.ShouldBe(new SaldoDeclarado(-63_500m, AFavorDe.Empresa));
+        nuevo.ShouldBe(new SaldoDeclarado(5_700m, AFavorDe.Conductor));
+    }
+
+    [Fact]
+    public void DeducirDireccionSaldos_SinSaldoNuevo_SoloFijaElSaldoDelViaje()
+    {
+        SaldoDeclarado? viaje = new(69_200m, null), anterior = new(63_500m, null), nuevo = null;
+
+        LectorPlanilla.DeducirDireccionSaldos(2_869_200m, 2_800_000m, ref viaje, ref anterior, ref nuevo).ShouldBeTrue();
+
+        viaje.ShouldBe(new SaldoDeclarado(69_200m, AFavorDe.Conductor));
+        anterior.ShouldBe(new SaldoDeclarado(63_500m, null)); // no hay con qué compararlo
+    }
+
+    [Fact]
+    public void DeducirDireccionSaldos_AnticipoMayorQueGastos_QuedaAFavorDeLaEmpresa()
+    {
+        SaldoDeclarado? viaje = new(100m, null), anterior = null, nuevo = null;
+        LectorPlanilla.DeducirDireccionSaldos(900m, 1_000m, ref viaje, ref anterior, ref nuevo).ShouldBeTrue();
+        viaje.ShouldBe(new SaldoDeclarado(-100m, AFavorDe.Empresa));
+    }
+
+    [Fact]
+    public void DeducirDireccionSaldos_ConDireccionEscritaOAmbiguo_NoCambiaNada()
+    {
+        SaldoDeclarado? viaje = new(69_200m, AFavorDe.Conductor), anterior = new(-63_500m, AFavorDe.Empresa), nuevo = new(5_700m, AFavorDe.Conductor);
+        LectorPlanilla.DeducirDireccionSaldos(2_869_200m, 2_800_000m, ref viaje, ref anterior, ref nuevo).ShouldBeFalse();
+
+        // Sin total declarado, 10 + (−10) = 0 y (−10) + 10 = 0 cuadran igual: no se adivina.
+        SaldoDeclarado? v = new(10m, null), a = new(10m, null), n = new(0m, null);
+        LectorPlanilla.DeducirDireccionSaldos(null, 0m, ref v, ref a, ref n).ShouldBeFalse();
+        v.ShouldBe(new SaldoDeclarado(10m, null));
+    }
+
+    [Theory]
     [InlineData("TOTAL GASTOS", true)]
     [InlineData("Saldo anterior", true)]
     [InlineData("FECHA INICIO", true)]

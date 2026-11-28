@@ -133,6 +133,92 @@ public class PlanillasControllerTests
     }
 
     [Fact]
+    public async Task GuardarPlanilla_PrimeraDelConductor_ConSaldoInicialConfirmado_UsaElSaldoEscrito()
+    {
+        var (controller, context) = CrearControllerConDb();
+
+        // Planilla real: 69.200 del viaje − 63.500 a favor de la empresa = 5.700 a favor del conductor.
+        var result = await controller.GuardarPlanilla(DtoPlanillaReal() with
+        {
+            SaldoAnteriorDeclarado = -63_500m,
+            UsarSaldoAnteriorDeclarado = true,
+        }, CancellationToken.None);
+
+        var created = result.ShouldBeOfType<CreatedAtActionResult>();
+        var cuerpo = created.Value.ShouldBeOfType<PlanillaGuardadaDto>();
+        cuerpo.Advertencias!.ShouldContain(a => a.StartsWith("Primera planilla del conductor en el sistema"));
+        var nueva = await context.Planillas.SingleAsync();
+        nueva.SaldoAnterior.ShouldBe(-63_500m);
+        nueva.SaldoViaje.ShouldBe(69_200m);
+        nueva.SaldoTotal.ShouldBe(5_700m);
+        nueva.TieneDiferencias.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task GuardarPlanilla_PrimeraDelConductor_SinConfirmar_ArrancaEnCero()
+    {
+        var (controller, context) = CrearControllerConDb();
+
+        await controller.GuardarPlanilla(DtoPlanillaReal() with { SaldoAnteriorDeclarado = -63_500m }, CancellationToken.None);
+
+        var nueva = await context.Planillas.SingleAsync();
+        nueva.SaldoAnterior.ShouldBe(0m);
+        nueva.SaldoTotal.ShouldBe(69_200m);
+        nueva.TieneDiferencias.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task GuardarPlanilla_ConductorConHistorial_IgnoraElSaldoInicialYAdvierte()
+    {
+        var (controller, context) = CrearControllerConDb();
+        context.Planillas.Add(new PlanillaViaje { Placa = "WCN410", Conductor = "PEDRO PEREZ",
+            FechaInicial = new DateOnly(2026, 10, 1), FechaFinal = new DateOnly(2026, 10, 5), SaldoTotal = -150_000m });
+        await context.SaveChangesAsync();
+
+        var result = await controller.GuardarPlanilla(DtoPlanillaReal() with
+        {
+            SaldoAnteriorDeclarado = 999_999m,
+            UsarSaldoAnteriorDeclarado = true,
+        }, CancellationToken.None);
+
+        var cuerpo = result.ShouldBeOfType<CreatedAtActionResult>().Value.ShouldBeOfType<PlanillaGuardadaDto>();
+        cuerpo.Advertencias!.ShouldContain(a => a.StartsWith("El conductor ya tiene planillas en el sistema"));
+        var nueva = await context.Planillas.OrderByDescending(p => p.Id).FirstAsync();
+        nueva.SaldoAnterior.ShouldBe(-150_000m);
+    }
+
+    [Fact]
+    public async Task GuardarPlanilla_MasAntiguaQueLaUltimaDelConductor_Advierte()
+    {
+        var (controller, context) = CrearControllerConDb();
+        context.Planillas.Add(new PlanillaViaje { Placa = "WCN410", Conductor = "PEDRO PEREZ",
+            FechaInicial = new DateOnly(2026, 11, 20), FechaFinal = new DateOnly(2026, 11, 25), SaldoTotal = 10_000m });
+        await context.SaveChangesAsync();
+
+        // DtoPlanillaReal va del 1 al 5 de noviembre: es anterior a la que ya está guardada.
+        var result = await controller.GuardarPlanilla(DtoPlanillaReal(), CancellationToken.None);
+
+        var cuerpo = result.ShouldBeOfType<CreatedAtActionResult>().Value.ShouldBeOfType<PlanillaGuardadaDto>();
+        cuerpo.Advertencias!.ShouldContain(a => a.StartsWith("Ya existe una planilla de este conductor que termina después de esta"));
+    }
+
+    [Fact]
+    public async Task ObtenerConductores_DevuelveLosNombresSinRepetir_DelMasRecienteAlMasAntiguo()
+    {
+        var (controller, context) = CrearControllerConDb();
+        context.Planillas.AddRange(
+            new PlanillaViaje { Placa = "WCN410", Conductor = "PEDRO PEREZ", FechaInicial = new DateOnly(2026, 9, 1), FechaFinal = new DateOnly(2026, 9, 5) },
+            new PlanillaViaje { Placa = "WCN410", Conductor = "PEDRO PEREZ", FechaInicial = new DateOnly(2026, 11, 1), FechaFinal = new DateOnly(2026, 11, 5) },
+            new PlanillaViaje { Placa = "ABC123", Conductor = "ANDRES GOMEZ", FechaInicial = new DateOnly(2026, 10, 1), FechaFinal = new DateOnly(2026, 10, 5) });
+        await context.SaveChangesAsync();
+
+        var result = await controller.ObtenerConductores(CancellationToken.None);
+
+        result.ShouldBeOfType<OkObjectResult>().Value.ShouldBeOfType<List<string>>()
+            .ShouldBe(new List<string> { "PEDRO PEREZ", "ANDRES GOMEZ" });
+    }
+
+    [Fact]
     public async Task GuardarPlanilla_SaldoFueraDelTope_Retorna422()
     {
         var (controller, context) = CrearControllerConDb();

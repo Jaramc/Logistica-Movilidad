@@ -107,8 +107,31 @@ public class PlanillasController : ControllerBase
                 $"SELECT pg_advisory_xact_lock(hashtext({"planilla-conductor:" + conductor}))", cancellationToken);
         }
 
-        // El saldo anterior NUNCA viene del cliente: es el SaldoTotal de la última planilla del conductor.
-        var (saldoAnterior, _) = await SaldoAnteriorAsync(conductor, cancellationToken);
+        // El saldo anterior es el SaldoTotal de la última planilla del conductor. Única excepción: la
+        // primera planilla del conductor en el sistema, donde el revisor puede confirmar el saldo
+        // escrito en papel como saldo inicial (si no, toda la cadena del conductor arrancaría en 0).
+        var ultima = await UltimaPlanillaAsync(conductor, cancellationToken);
+        var saldoAnterior = ultima?.SaldoTotal ?? 0m;
+        var advertencias = new List<string>();
+        var usaSaldoInicial = false;
+        if (dto.UsarSaldoAnteriorDeclarado && dto.SaldoAnteriorDeclarado is { } saldoInicial)
+        {
+            if (ultima is null)
+            {
+                saldoAnterior = CalculadoraLiquidacion.Redondear(saldoInicial);
+                usaSaldoInicial = true;
+                advertencias.Add($"Primera planilla del conductor en el sistema: se tomó como saldo inicial el saldo anterior escrito en papel ({DescribirSaldo(saldoAnterior)}).");
+            }
+            else
+            {
+                advertencias.Add("El conductor ya tiene planillas en el sistema: se ignoró el saldo inicial y se usó el saldo de su última planilla.");
+            }
+        }
+        if (ultima is not null && ultima.FechaFinal > dto.FechaInicial)
+        {
+            advertencias.Add($"Ya existe una planilla de este conductor que termina después de esta (#{ultima.Id}, fin {ultima.FechaFinal:yyyy-MM-dd}). " +
+                "El saldo anterior se tomó de esa planilla; si esta es más antigua, revisa la cadena de saldos.");
+        }
 
         var calculo = CalculadoraLiquidacion.Calcular(
             dto.Flete, dto.Anticipo, dto.Gastos.Select(g => g.Valor), saldoAnterior);
@@ -180,14 +203,13 @@ public class PlanillasController : ControllerBase
         }
 
         _logger.LogInformation("Planilla {Id} guardada por el usuario {UsuarioId}.", entidad.Id, usuarioId);
-        var advertencias = new List<string>();
         if (dto.SaldoAnteriorDeclarado is { } declarado && CalculadoraLiquidacion.Redondear(declarado) != entidad.SaldoAnterior)
         {
             advertencias.Add($"El saldo anterior escrito en la planilla ({DescribirSaldo(declarado)}) difiere del calculado " +
                 $"desde la última planilla del conductor ({DescribirSaldo(entidad.SaldoAnterior)}). Se guardó el calculado.");
         }
         await _auditoria.RegistrarAsync(AccionesAuditoria.PlanillaGuardada, true, usuarioId, "PlanillaViaje", entidad.Id.ToString(),
-            new { placa = entidad.Placa, renglones = entidad.Gastos.Count, entidad.TotalGastos, entidad.SaldoTotal });
+            new { placa = entidad.Placa, renglones = entidad.Gastos.Count, entidad.TotalGastos, entidad.SaldoTotal, saldoInicial = usaSaldoInicial });
 
         return CreatedAtAction(
             nameof(ObtenerPlanillaPorId),
@@ -215,19 +237,38 @@ public class PlanillasController : ControllerBase
         }
 
         var normalizado = NormalizarConductor(conductor);
-        var (saldo, planillaId) = await SaldoAnteriorAsync(normalizado, cancellationToken);
-        return Ok(new SaldoAnteriorDto(normalizado, saldo, planillaId));
+        var ultima = await UltimaPlanillaAsync(normalizado, cancellationToken);
+        return Ok(new SaldoAnteriorDto(normalizado, ultima?.SaldoTotal ?? 0m, ultima?.Id));
     }
 
-    private async Task<(decimal Saldo, int? PlanillaId)> SaldoAnteriorAsync(string conductorNormalizado, CancellationToken cancellationToken)
+    /// <summary>
+    /// Nombres de conductores que ya tienen planillas, del más reciente al más antiguo. La UI los
+    /// sugiere al escribir: la cadena de saldos se encadena por nombre, así que un nombre escrito
+    /// distinto ("Pedro" vs "PEDRO PEREZ") empezaría una cadena nueva en 0.
+    /// </summary>
+    [HttpGet("conductores")]
+    [Authorize(Policy = Politicas.PuedeLeer)]
+    [ProducesResponseType(typeof(List<string>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ObtenerConductores(CancellationToken cancellationToken)
     {
-        var ultima = await _context.Planillas.AsNoTracking()
+        var nombres = await _context.Planillas.AsNoTracking()
+            .GroupBy(p => p.Conductor)
+            .Select(g => new { Nombre = g.Key, Ultima = g.Max(p => p.FechaFinal) })
+            .OrderByDescending(x => x.Ultima).ThenBy(x => x.Nombre)
+            .Take(500)
+            .Select(x => x.Nombre)
+            .ToListAsync(cancellationToken);
+        return Ok(nombres);
+    }
+
+    private sealed record UltimaPlanilla(int Id, decimal SaldoTotal, DateOnly FechaFinal);
+
+    private async Task<UltimaPlanilla?> UltimaPlanillaAsync(string conductorNormalizado, CancellationToken cancellationToken) =>
+        await _context.Planillas.AsNoTracking()
             .Where(p => p.Conductor.ToUpper() == conductorNormalizado)
             .OrderByDescending(p => p.FechaFinal).ThenByDescending(p => p.Id)
-            .Select(p => new { p.Id, p.SaldoTotal })
+            .Select(p => new UltimaPlanilla(p.Id, p.SaldoTotal, p.FechaFinal))
             .FirstOrDefaultAsync(cancellationToken);
-        return ultima is null ? (0m, null) : (ultima.SaldoTotal, ultima.Id);
-    }
 
     private static decimal? Declarado(decimal? valor) => valor is { } v ? CalculadoraLiquidacion.Redondear(v) : null;
 

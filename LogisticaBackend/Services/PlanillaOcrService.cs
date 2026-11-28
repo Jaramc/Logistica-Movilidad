@@ -151,6 +151,15 @@ public class PlanillaOcrService : IPlanillaOcrService
         var conductor = ExtraerTexto(fields, new[] { "Conductor" }, leidos);
 
         var planilla = LectorPlanilla.Interpretar(lectura, montosDelModelo);
+        var advertencias = planilla.Advertencias.ToList();
+
+        // El modelo no tiene campo Conductor: se propone el nombre escrito junto a los saldos
+        // ("69.200 Pedro"). Suele ser solo el nombre de pila, así que el revisor debe completarlo.
+        if (conductor is null && planilla.ConductorEnSaldos is { } nombreEnSaldos)
+        {
+            conductor = nombreEnSaldos;
+            advertencias.Add($"Conductor tomado del nombre escrito en los saldos («{nombreEnSaldos}»): confirma que sea el conductor correcto y su nombre completo.");
+        }
 
         if (usaLayout)
         {
@@ -188,7 +197,7 @@ public class PlanillaOcrService : IPlanillaOcrService
             FechaFinal: planilla.FechaFinal,
             Manifiesto: planilla.Manifiesto,
             EmpresaTransportadora: planilla.EmpresaTransportadora,
-            Advertencias: planilla.Advertencias.Count > 0 ? planilla.Advertencias.ToList() : null,
+            Advertencias: advertencias.Count > 0 ? advertencias : null,
             ConfianzaPromedio: confianzaPromedio,
             CamposNoEncontrados: planilla.CamposNoEncontrados.Distinct().ToList(),
             JsonOcrCrudo: JsonSerializer.Serialize(leidos, OpcionesJson),
