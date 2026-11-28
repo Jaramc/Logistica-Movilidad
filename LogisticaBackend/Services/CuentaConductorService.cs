@@ -226,6 +226,19 @@ public sealed class CuentaConductorService : ICuentaConductorService
 
         var movimiento = await EjecutarAsync(conductorId, async (saldoAnterior, ct) =>
         {
+            if (viajeId is { } idViaje)
+            {
+                var conductorDelViaje = await _db.Viajes.AsNoTracking()
+                    .Where(v => v.Id == idViaje)
+                    .Select(v => (int?)v.ConductorId)
+                    .FirstOrDefaultAsync(ct);
+                if (conductorDelViaje != conductorId)
+                {
+                    throw new ReglaDeNegocioException(StatusCodes.Status422UnprocessableEntity,
+                        "El viaje indicado no existe o no pertenece a este conductor.");
+                }
+            }
+
             _db.PagosSaldo.Add(pago);
             await _db.SaveChangesAsync(ct); // asigna pago.Id, que necesita el movimiento
             var tipoMovimiento = tipo == TipoPago.PagoEmpresa ? TipoMovimientoSaldo.PagoEmpresa : TipoMovimientoSaldo.DescuentoNomina;

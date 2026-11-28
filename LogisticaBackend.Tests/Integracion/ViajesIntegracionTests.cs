@@ -200,6 +200,31 @@ public class ViajesIntegracionTests
     }
 
     [Fact]
+    public async Task RegistrarPago_ConViajeDeOtroConductor_Rechazado422()
+    {
+        var (administrador, _) = await Sembrador.SesionAsync(_fabrica, Roles.Administrador);
+        using (administrador)
+        {
+            var (conductorA, vehiculoA) = await SembrarCatalogosAsync();
+            var r = await administrador.PostAsync("/api/viajes", AbrirBody(conductorA, vehiculoA));
+            var viajeDeA = (await r.JsonAsync()).GetProperty("id").GetInt32();
+
+            var (conductorB, _) = await SembrarCatalogosAsync();
+            var pago = await administrador.PostAsync($"/api/conductores/{conductorB}/pagos",
+                new { tipo = "PagoEmpresa", valor = 50_000m, fecha = "2026-06-20", viajeId = viajeDeA });
+            pago.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity, await pago.Content.ReadAsStringAsync());
+
+            var inexistente = await administrador.PostAsync($"/api/conductores/{conductorB}/pagos",
+                new { tipo = "PagoEmpresa", valor = 50_000m, fecha = "2026-06-20", viajeId = int.MaxValue });
+            inexistente.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+
+            var hayPagos = await Sembrador.EnScopeAsync(_fabrica, sp =>
+                sp.GetRequiredService<AppDbContext>().PagosSaldo.AnyAsync(p => p.ConductorId == conductorB));
+            hayPagos.ShouldBeFalse();
+        }
+    }
+
+    [Fact]
     public async Task Reabrir_PagoPosteriorSinViajeQueLoSalda_Rechazado409()
     {
         var (administrador, _) = await Sembrador.SesionAsync(_fabrica, Roles.Administrador);
