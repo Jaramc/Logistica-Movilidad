@@ -37,6 +37,8 @@ public class ViajeConfiguration : IEntityTypeConfiguration<Viaje>
         builder.Property(x => x.AprobadoPorUsuarioId).HasColumnName("aprobado_por_usuario_id");
         builder.Property(x => x.AprobadoEn).HasColumnName("aprobado_en").HasColumnType("timestamp with time zone");
 
+        builder.Property(x => x.ActualizadoEn).HasColumnName("actualizado_en").HasColumnType("timestamp with time zone");
+
         builder.Property(x => x.Version).IsRowVersion();
 
         builder.HasOne(x => x.Conductor).WithMany().HasForeignKey(x => x.ConductorId).OnDelete(DeleteBehavior.Restrict);

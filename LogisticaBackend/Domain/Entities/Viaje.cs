@@ -36,6 +36,12 @@ public class Viaje
     public Guid? AprobadoPorUsuarioId { get; set; }
     public DateTime? AprobadoEn { get; set; }
 
+    /// <summary>
+    /// Última modificación del viaje o de sus hijos (p. ej. un traslado). Tocarla al guardar un hijo
+    /// obliga a reescribir la fila del viaje, así el xmin detecta el choque con una aprobación simultánea.
+    /// </summary>
+    public DateTime? ActualizadoEn { get; set; }
+
     /// <summary>Token de concurrencia optimista nativo de PostgreSQL (columna oculta de sistema xmin).</summary>
     public uint Version { get; set; }
 

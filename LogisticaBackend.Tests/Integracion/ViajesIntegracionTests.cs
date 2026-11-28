@@ -113,6 +113,30 @@ public class ViajesIntegracionTests
     }
 
     [Fact]
+    public async Task Traslado_ReescribeElViaje_UnaCopiaViejaChocaPorXmin()
+    {
+        var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
+        using (cliente)
+        {
+            var (conductorId, vehiculoId) = await SembrarCatalogosAsync();
+            var r = await cliente.PostAsync("/api/viajes", AbrirBody(conductorId, vehiculoId));
+            var viajeId = (await r.JsonAsync()).GetProperty("id").GetInt32();
+
+            using var scope = _fabrica.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            // Simula una aprobación que leyó el viaje antes de que llegara el traslado.
+            var copiaVieja = await db.Viajes.FirstAsync(v => v.Id == viajeId);
+
+            var traslado = await cliente.PostAsync($"/api/viajes/{viajeId}/traslados",
+                new { fecha = "2026-06-13", valor = 2_800_000m, medio = "Transferencia" });
+            traslado.StatusCode.ShouldBe(HttpStatusCode.Created, await traslado.Content.ReadAsStringAsync());
+
+            copiaVieja.Estado = EstadoViaje.Aprobado;
+            await Should.ThrowAsync<DbUpdateConcurrencyException>(() => db.SaveChangesAsync());
+        }
+    }
+
+    [Fact]
     public async Task Aprobar_SinPlanillaNiTraslado_Rechazado422()
     {
         var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
