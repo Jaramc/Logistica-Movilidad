@@ -2,6 +2,7 @@ using Azure;
 using FluentValidation;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using LogisticaBackend.Services;
 
 namespace LogisticaBackend.Middleware;
 
@@ -53,6 +54,10 @@ public class GlobalExceptionHandler : IExceptionHandler
 
             case ValidationException:
                 return (StatusCodes.Status422UnprocessableEntity, "Error de validación", "Uno o más campos no cumplen las reglas.");
+
+            case ReglaDeNegocioException negocio:
+                // El mensaje lo construye código interno de confianza para el usuario final (no viene del cliente).
+                return (negocio.StatusCode, "Regla de negocio", negocio.Message);
 
             case BadHttpRequestException bad:
                 // Cuerpo demasiado grande, formulario mal formado, etc. El mensaje interno no se expone.

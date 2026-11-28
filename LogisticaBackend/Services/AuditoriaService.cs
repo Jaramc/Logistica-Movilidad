@@ -24,6 +24,10 @@ public static class AccionesAuditoria
     public const string UsuarioActivado = "UsuarioActivado";
     public const string PlanillaGuardada = "PlanillaGuardada";
     public const string ConsolidadoDescargado = "ConsolidadoDescargado";
+    public const string SaldoInicialRegistrado = "SaldoInicialRegistrado";
+    public const string ViajeCerrado = "ViajeCerrado";
+    public const string PagoRegistrado = "PagoRegistrado";
+    public const string AjusteRegistrado = "AjusteRegistrado";
 }
 
 public interface IAuditoriaService

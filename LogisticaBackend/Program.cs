@@ -74,6 +74,7 @@ builder.Services.AddScoped<IPlanillaOcrService, PlanillaOcrService>();
 builder.Services.AddScoped<IExcelExportService, ExcelExportService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuditoriaService, AuditoriaService>();
+builder.Services.AddScoped<ICuentaConductorService, CuentaConductorService>();
 
 // 7. Base de Datos PostgreSQL con Entity Framework Core (obligatoria).
 // En Production se niega a arrancar si falta la cadena o contiene valores de ejemplo.
