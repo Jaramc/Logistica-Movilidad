@@ -198,4 +198,34 @@ public class ViajesIntegracionTests
             reabrir.StatusCode.ShouldBe(HttpStatusCode.Conflict);
         }
     }
+
+    [Fact]
+    public async Task Reabrir_PagoPosteriorSinViajeQueLoSalda_Rechazado409()
+    {
+        var (administrador, _) = await Sembrador.SesionAsync(_fabrica, Roles.Administrador);
+        using (administrador)
+        {
+            var (conductorId, vehiculoId) = await SembrarCatalogosAsync();
+            var r = await administrador.PostAsync("/api/viajes", AbrirBody(conductorId, vehiculoId));
+            var viajeId = (await r.JsonAsync()).GetProperty("id").GetInt32();
+            await administrador.PostAsync($"/api/viajes/{viajeId}/traslados", new { fecha = "2026-06-13", valor = 2_800_000m, medio = "Transferencia" });
+            // Saldo del viaje: 2.900.000 − 2.800.000 = +100.000.
+            await SembrarPlanillaDelViajeAsync(viajeId, totalGastos: 2_900_000m, anticipoDeclarado: 2_800_000m);
+            var aprobar = await administrador.PostAsync($"/api/viajes/{viajeId}/aprobar");
+            aprobar.StatusCode.ShouldBe(HttpStatusCode.OK, await aprobar.Content.ReadAsStringAsync());
+
+            // Pago sin viaje: la compensación FIFO lo aplica a la partida del viaje.
+            var pago = await administrador.PostAsync($"/api/conductores/{conductorId}/pagos",
+                new { tipo = "PagoEmpresa", valor = 100_000m, fecha = "2026-06-20" });
+            pago.StatusCode.ShouldBe(HttpStatusCode.Created, await pago.Content.ReadAsStringAsync());
+
+            var detalle = await administrador.GetAsync($"/api/viajes/{viajeId}");
+            (await detalle.JsonAsync()).GetProperty("estado").GetString().ShouldBe("Saldado");
+
+            var reabrir = await administrador.PostAsync($"/api/viajes/{viajeId}/reabrir", new { motivo = "Intento tras pago FIFO" });
+            reabrir.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+            (await reabrir.JsonAsync()).GetProperty("detail").GetString()
+                .ShouldBe("Hay pagos registrados después de la aprobación de este viaje; no se puede reabrir. Registra un ajuste si hace falta corregir.");
+        }
+    }
 }
