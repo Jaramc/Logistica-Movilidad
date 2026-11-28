@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using LogisticaBackend.Auth;
 using LogisticaBackend.Data;
+using LogisticaBackend.Domain.Entities;
 using LogisticaBackend.Tests.Integracion.Infraestructura;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,10 +18,40 @@ public class PlanillasIntegracionTests
 
     public PlanillasIntegracionTests(PostgresFixture postgres) => _fabrica = Fabricas.Principal(postgres);
 
-    private static object Planilla(string conductor, object? extras = null) => new
+    private static string CedulaPrueba() => Random.Shared.Next(100_000_000, 999_999_999).ToString();
+    private static string CodigoPrueba() => "C" + Guid.NewGuid().ToString("N")[..9].ToUpperInvariant();
+    // 26^3 * 900 combinaciones: la base la comparte toda la colección de pruebas, y con un prefijo
+    // fijo (p. ej. "WWW" + 3 dígitos) las colisiones aparecían rápido (solo 900 combinaciones).
+    private static string PlacaPrueba() =>
+        string.Concat(Enumerable.Range(0, 3).Select(_ => (char)('A' + Random.Shared.Next(26)))) + Random.Shared.Next(100, 999);
+
+    /// <summary>Siembra un conductor, un vehículo y un viaje Abierto (bloques 1 y 4 de la fase 1). Devuelve el ViajeId.</summary>
+    private async Task<int> SembrarViajeAsync(string? placa = null, string conductorNombre = "CONDUCTOR PRUEBA")
     {
-        placa = "wcn-410",
-        conductor,
+        placa ??= PlacaPrueba();
+        return await Sembrador.EnScopeAsync(_fabrica, async sp =>
+        {
+            var db = sp.GetRequiredService<AppDbContext>();
+            var conductor = new Conductor { Codigo = CodigoPrueba(), NombreCompleto = conductorNombre, Cedula = CedulaPrueba() };
+            var vehiculo = new Vehiculo { Placa = placa, Tipo = "Tractomula" };
+            db.Conductores.Add(conductor);
+            db.Vehiculos.Add(vehiculo);
+            await db.SaveChangesAsync();
+
+            var viaje = new Viaje
+            {
+                ConductorId = conductor.Id, VehiculoId = vehiculo.Id, Origen = "BOGOTA", Destino = "MEDELLIN",
+                Cliente = "CLIENTE PRUEBA", FechaInicio = new DateOnly(2026, 11, 1), Estado = EstadoViaje.Abierto,
+            };
+            db.Viajes.Add(viaje);
+            await db.SaveChangesAsync();
+            return viaje.Id;
+        });
+    }
+
+    private static object Planilla(int viajeId, object? extras = null) => new
+    {
+        viajeId,
         origen = "BOGOTA",
         destino = "MEDELLIN",
         fechaInicial = "2026-11-01",
@@ -44,7 +75,7 @@ public class PlanillasIntegracionTests
         var (cliente, revisor) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
         using (cliente)
         {
-            var conductor = "CONDUCTOR " + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+            var viajeId = await SembrarViajeAsync();
             var malicioso = new
             {
                 id = 999_999,
@@ -54,7 +85,7 @@ public class PlanillasIntegracionTests
                 saldoTotal = 50_000_000m,
                 saldoAnterior = 50_000_000m,
                 creadoPorUsuarioId = Guid.NewGuid(),
-                placa = "WCN410", conductor, origen = "BOGOTA", destino = "MEDELLIN",
+                viajeId, origen = "BOGOTA", destino = "MEDELLIN",
                 fechaInicial = "2026-11-01", fechaFinal = "2026-11-05", flete = 6_976_800m, anticipo = 2_800_000m,
                 gastos = new[] { new { concepto = "PEAJES", valor = 1_500_000m }, new { concepto = "ACPM", valor = 1_369_200m } },
             };
@@ -66,7 +97,7 @@ public class PlanillasIntegracionTests
             data.GetProperty("id").GetInt32().ShouldNotBe(999_999);
             data.GetProperty("estadoRevision").GetString().ShouldBe("Aprobado");
             data.GetProperty("totalGastos").GetDecimal().ShouldBe(2_869_200m);
-            data.GetProperty("saldoAnterior").GetDecimal().ShouldBe(0m);  // primera planilla del conductor
+            data.GetProperty("saldoAnterior").GetDecimal().ShouldBe(0m); // conductor recién creado, sin movimientos
             data.GetProperty("saldoViaje").GetDecimal().ShouldBe(69_200m);
             data.GetProperty("saldoTotal").GetDecimal().ShouldBe(69_200m);
             data.GetProperty("creadoPorUsuarioId").GetGuid().ShouldBe(revisor.Id);
@@ -75,25 +106,24 @@ public class PlanillasIntegracionTests
     }
 
     [Fact]
-    public async Task Guardar_EncadenaElSaldoAnteriorDelConductor_YPermiteSaldosNegativos()
+    public async Task Guardar_TomaElSaldoDeLaCuentaDelConductor_YPermiteSaldosNegativos()
     {
         var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
         using (cliente)
         {
-            var conductor = "CADENA " + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
-
-            // Anticipo mayor que los gastos: saldo del viaje negativo.
-            var primera = await cliente.PostAsync("/api/planillas", new
+            var viajeId = await SembrarViajeAsync();
+            var conductorId = await Sembrador.EnScopeAsync(_fabrica, sp => sp.GetRequiredService<AppDbContext>()
+                .Viajes.AsNoTracking().Where(v => v.Id == viajeId).Select(v => v.ConductorId).SingleAsync());
+            await Sembrador.EnScopeAsync(_fabrica, async sp =>
             {
-                placa = "ABC123", conductor, origen = "A", destino = "B", fechaInicial = "2026-10-01", fechaFinal = "2026-10-03",
-                flete = 0m, anticipo = 3_000_000m, gastos = new[] { new { concepto = "ACPM", valor = 2_000_000m } },
+                await sp.GetRequiredService<LogisticaBackend.Services.ICuentaConductorService>()
+                    .RegistrarSaldoInicialAsync(conductorId, -1_000_000m, new DateOnly(2026, 10, 1), "Saldo inicial de prueba", null);
+                return true;
             });
-            primera.StatusCode.ShouldBe(HttpStatusCode.Created, await primera.Content.ReadAsStringAsync());
-            (await primera.JsonAsync()).GetProperty("data").GetProperty("saldoTotal").GetDecimal().ShouldBe(-1_000_000m);
 
-            var segunda = await cliente.PostAsync("/api/planillas", Planilla(conductor.ToLowerInvariant()));
-            segunda.StatusCode.ShouldBe(HttpStatusCode.Created);
-            var data = (await segunda.JsonAsync()).GetProperty("data");
+            var r = await cliente.PostAsync("/api/planillas", Planilla(viajeId));
+            r.StatusCode.ShouldBe(HttpStatusCode.Created, await r.Content.ReadAsStringAsync());
+            var data = (await r.JsonAsync()).GetProperty("data");
             data.GetProperty("saldoAnterior").GetDecimal().ShouldBe(-1_000_000m);
             data.GetProperty("saldoTotal").GetDecimal().ShouldBe(-930_800m);
 
@@ -105,60 +135,15 @@ public class PlanillasIntegracionTests
     }
 
     [Fact]
-    public async Task SaldoAnterior_DevuelveElSaldoTotalDeLaUltimaPlanilla_YAdvierteSiElEscritoDifiere()
-    {
-        var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
-        using (cliente)
-        {
-            var conductor = "SALDOS " + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
-
-            var sinPlanillas = await (await cliente.Http.GetAsync($"/api/planillas/saldo-anterior?conductor={Uri.EscapeDataString(conductor)}")).JsonAsync();
-            sinPlanillas.GetProperty("saldoAnterior").GetDecimal().ShouldBe(0m);
-            sinPlanillas.GetProperty("planillaAnteriorId").ValueKind.ShouldBe(System.Text.Json.JsonValueKind.Null);
-
-            // Gastos 120.000 sin anticipo: 120.000 a favor del conductor.
-            var primera = await cliente.PostAsync("/api/planillas", new
-            {
-                placa = "STW514", conductor, origen = "Buenaventura", destino = "Urbano", fechaInicial = "2026-06-13", fechaFinal = "2026-06-13",
-                flete = 0m, anticipo = 0m, gastos = new[] { new { concepto = "PORCENTAJE", valor = 120_000m } },
-            });
-            primera.StatusCode.ShouldBe(HttpStatusCode.Created, await primera.Content.ReadAsStringAsync());
-            var idPrimera = (await primera.JsonAsync()).GetProperty("id").GetInt32();
-
-            var r = await cliente.Http.GetAsync($"/api/planillas/saldo-anterior?conductor={Uri.EscapeDataString("  " + conductor.ToLowerInvariant())}");
-            r.StatusCode.ShouldBe(HttpStatusCode.OK);
-            var saldo = await r.JsonAsync();
-            saldo.GetProperty("conductor").GetString().ShouldBe(conductor);
-            saldo.GetProperty("saldoAnterior").GetDecimal().ShouldBe(120_000m);
-            saldo.GetProperty("planillaAnteriorId").GetInt32().ShouldBe(idPrimera);
-
-            // En papel dice 63.500 a favor de la empresa; el sistema calcula 120.000 a favor del conductor.
-            var segunda = await cliente.PostAsync("/api/planillas", new
-            {
-                placa = "STW514", conductor, origen = "Buenaventura", destino = "Medellin", fechaInicial = "2026-06-13", fechaFinal = "2026-06-19",
-                flete = 0m, anticipo = 0m, gastos = new[] { new { concepto = "PEAJES", valor = 10_000m } },
-                saldoAnteriorDeclarado = -63_500m,
-            });
-            segunda.StatusCode.ShouldBe(HttpStatusCode.Created, await segunda.Content.ReadAsStringAsync());
-            var cuerpo = await segunda.JsonAsync();
-            cuerpo.GetProperty("data").GetProperty("saldoAnterior").GetDecimal().ShouldBe(120_000m); // no se sobrescribe
-            cuerpo.GetProperty("advertencias")[0].GetString()!.ShouldContain("$63.500 a favor de la empresa");
-
-            var vacio = await cliente.Http.GetAsync("/api/planillas/saldo-anterior?conductor=");
-            vacio.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
-        }
-    }
-
-    [Fact]
     public async Task Guardar_UsaLaCategoriaElegidaEnLaUi_YRechazaCategoriasDesconocidas()
     {
         var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
         using (cliente)
         {
-            var conductor = "CATEGORIA " + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+            var viajeId = await SembrarViajeAsync();
             object Con(object gasto) => new
             {
-                placa = "STW514", conductor, origen = "Buenaventura", destino = "Medellin", fechaInicial = "2026-06-13", fechaFinal = "2026-06-19",
+                viajeId, origen = "Buenaventura", destino = "Medellin", fechaInicial = "2026-06-13", fechaFinal = "2026-06-19",
                 flete = 0m, anticipo = 0m, gastos = new[] { gasto },
             };
 
@@ -167,9 +152,63 @@ public class PlanillasIntegracionTests
             r.StatusCode.ShouldBe(HttpStatusCode.Created, await r.Content.ReadAsStringAsync());
             (await r.JsonAsync()).GetProperty("data").GetProperty("gastos")[0].GetProperty("conceptoCanonico").GetString().ShouldBe("ACPM");
 
-            var invalida = await cliente.PostAsync("/api/planillas", Con(new { concepto = "Repuesto", valor = 10_000m, categoria = "GASOLINA" }));
+            var otroViajeId = await SembrarViajeAsync();
+            object ConOtroViaje(object gasto) => new
+            {
+                viajeId = otroViajeId, origen = "Buenaventura", destino = "Medellin", fechaInicial = "2026-06-13", fechaFinal = "2026-06-19",
+                flete = 0m, anticipo = 0m, gastos = new[] { gasto },
+            };
+            var invalida = await cliente.PostAsync("/api/planillas", ConOtroViaje(new { concepto = "Repuesto", valor = 10_000m, categoria = "GASOLINA" }));
             invalida.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
             (await invalida.Content.ReadAsStringAsync()).ShouldContain("16 del consolidado");
+        }
+    }
+
+    [Fact]
+    public async Task Guardar_ViajeYaTienePlanilla_Rechazado409()
+    {
+        var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
+        using (cliente)
+        {
+            var viajeId = await SembrarViajeAsync();
+            var primera = await cliente.PostAsync("/api/planillas", Planilla(viajeId));
+            primera.StatusCode.ShouldBe(HttpStatusCode.Created, await primera.Content.ReadAsStringAsync());
+
+            var segunda = await cliente.PostAsync("/api/planillas", Planilla(viajeId));
+            segunda.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        }
+    }
+
+    [Fact]
+    public async Task Guardar_ViajeInexistente_Rechazado404()
+    {
+        var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
+        using (cliente)
+        {
+            var r = await cliente.PostAsync("/api/planillas", Planilla(9_999_999));
+            r.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        }
+    }
+
+    [Fact]
+    public async Task Guardar_PlacaLeidaPorElOcrDistintaDeLaDelViaje_Advierte()
+    {
+        var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
+        using (cliente)
+        {
+            var placaReal = PlacaPrueba();
+            var viajeId = await SembrarViajeAsync(placaReal);
+
+            var r = await cliente.PostAsync("/api/planillas", new
+            {
+                viajeId, placa = "ZZZ999", origen = "BOGOTA", destino = "MEDELLIN",
+                fechaInicial = "2026-11-01", fechaFinal = "2026-11-05", flete = 0m, anticipo = 0m,
+                gastos = new[] { new { concepto = "PEAJES", valor = 10_000m } },
+            });
+            r.StatusCode.ShouldBe(HttpStatusCode.Created, await r.Content.ReadAsStringAsync());
+            var cuerpo = await r.JsonAsync();
+            cuerpo.GetProperty("advertencias")[0].GetString()!.ShouldContain("no coincide con la del viaje");
+            cuerpo.GetProperty("data").GetProperty("placa").GetString().ShouldBe(placaReal); // la del viaje manda
         }
     }
 
@@ -202,10 +241,10 @@ public class PlanillasIntegracionTests
         var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
         using (cliente)
         {
-            var conductor = "PEDRO " + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+            var viajeId = await SembrarViajeAsync(ocr.Placa);
             var r = await cliente.PostAsync("/api/planillas", new
             {
-                placa = ocr.Placa, conductor, origen = ocr.Origen, destino = ocr.Destino,
+                viajeId, placa = ocr.Placa, origen = ocr.Origen, destino = ocr.Destino,
                 fechaInicial = ocr.FechaInicial, fechaFinal = ocr.FechaFinal, manifiesto = ocr.Manifiesto,
                 empresaTransportadora = ocr.EmpresaTransportadora, flete = ocr.Flete, anticipo = ocr.Anticipo,
                 gastos = ocr.DetalleGastos.Select(g => new
@@ -240,57 +279,15 @@ public class PlanillasIntegracionTests
     }
 
     [Fact]
-    public async Task PlanillaReal01_PrimeraDelConductor_ConSaldoInicial_CierraEn5700YQuedaEnLaListaDeConductores()
-    {
-        var ocr = await PlanillaReal01.ProcesarAsync();
-        var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
-        using (cliente)
-        {
-            var conductor = "PEDRO INICIAL " + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
-            var r = await cliente.PostAsync("/api/planillas", new
-            {
-                placa = "STW514", conductor, origen = ocr.Origen, destino = ocr.Destino,
-                fechaInicial = ocr.FechaInicial, fechaFinal = ocr.FechaFinal,
-                empresaTransportadora = ocr.EmpresaTransportadora, flete = ocr.Flete, anticipo = ocr.Anticipo,
-                // El revisor corrigió PEAJES a 82.900: ahora la suma da el total escrito (2.869.200).
-                gastos = ocr.DetalleGastos.Select(g => new
-                {
-                    concepto = g.Concepto, valor = g.Etiqueta == "PEAJES" ? 82_900m : g.Valor,
-                    etiqueta = g.Etiqueta == "" ? null : g.Etiqueta, descripcion = g.Descripcion, categoria = g.CategoriaPropuesta,
-                }),
-                totalGastosDeclarado = ocr.TotalGastosDeclarado,
-                saldoViajeDeclarado = ocr.SaldoViajeDeclarado?.Valor,
-                saldoAnteriorDeclarado = ocr.SaldoAnteriorDeclarado?.Valor,
-                saldoNuevoDeclarado = ocr.SaldoNuevoDeclarado?.Valor,
-                usarSaldoAnteriorDeclarado = true,
-            });
-            r.StatusCode.ShouldBe(HttpStatusCode.Created, await r.Content.ReadAsStringAsync());
-            var data = (await r.JsonAsync()).GetProperty("data");
-            data.GetProperty("totalGastos").GetDecimal().ShouldBe(2_869_200m);
-            data.GetProperty("saldoAnterior").GetDecimal().ShouldBe(-63_500m);
-            data.GetProperty("saldoViaje").GetDecimal().ShouldBe(69_200m);
-            data.GetProperty("saldoTotal").GetDecimal().ShouldBe(5_700m);   // igual al "saldo nuevo" escrito
-            data.GetProperty("tieneDiferencias").GetBoolean().ShouldBeFalse();
-
-            // La próxima planilla del conductor arranca desde 5.700, no desde 0.
-            var saldo = await (await cliente.Http.GetAsync($"/api/planillas/saldo-anterior?conductor={Uri.EscapeDataString(conductor)}")).JsonAsync();
-            saldo.GetProperty("saldoAnterior").GetDecimal().ShouldBe(5_700m);
-
-            var conductores = await (await cliente.Http.GetAsync("/api/planillas/conductores")).JsonAsync();
-            conductores.EnumerateArray().Select(c => c.GetString()).ShouldContain(conductor);
-        }
-    }
-
-    [Fact]
     public async Task Guardar_ConValoresDeclarados_LosPersisteYMarcaDiferencias()
     {
         var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
         using (cliente)
         {
-            var conductor = "DECLARADOS " + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+            var viajeId = await SembrarViajeAsync();
             var r = await cliente.PostAsync("/api/planillas", new
             {
-                placa = "STW514", conductor, origen = "Buenaventura", destino = "Medellin", fechaInicial = "2026-06-13", fechaFinal = "2026-06-19",
+                viajeId, origen = "Buenaventura", destino = "Medellin", fechaInicial = "2026-06-13", fechaFinal = "2026-06-19",
                 empresaTransportadora = "Cliente Ejemplo", flete = 6_976_800m, anticipo = 2_800_000m,
                 gastos = new[]
                 {
@@ -312,23 +309,40 @@ public class PlanillasIntegracionTests
     }
 
     [Fact]
-    public async Task Guardar_ValidaPlacaFechasYTopesEnElServidor()
+    public async Task Guardar_ValidaFechasYTopesEnElServidor()
+    {
+        var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
+        using (cliente)
+        {
+            var viajeId = await SembrarViajeAsync();
+            var r = await cliente.PostAsync("/api/planillas", new
+            {
+                viajeId, origen = "A", destino = "B",
+                fechaInicial = "2099-01-01", fechaFinal = "2098-01-01",
+                flete = -1m, anticipo = 20_000_001m, gastos = new[] { new { concepto = "ACPM", valor = -5m } },
+            });
+            r.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+            var errores = (await r.JsonAsync()).GetProperty("errors");
+            foreach (var campo in new[] { "FechaInicial", "FechaFinal", "Flete", "Anticipo" })
+            {
+                errores.TryGetProperty(campo, out _).ShouldBeTrue($"Falta el error de {campo}");
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Guardar_SinViajeId_EsRechazado()
     {
         var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
         using (cliente)
         {
             var r = await cliente.PostAsync("/api/planillas", new
             {
-                placa = "12345", conductor = "X", origen = "A", destino = "B",
-                fechaInicial = "2099-01-01", fechaFinal = "2098-01-01",
-                flete = -1m, anticipo = 20_000_001m, gastos = new[] { new { concepto = "ACPM", valor = -5m } },
+                viajeId = 0, origen = "A", destino = "B", fechaInicial = "2026-06-01", fechaFinal = "2026-06-02",
+                flete = 0m, anticipo = 0m, gastos = new[] { new { concepto = "ACPM", valor = 100m } },
             });
             r.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
-            var errores = (await r.JsonAsync()).GetProperty("errors");
-            foreach (var campo in new[] { "Placa", "FechaInicial", "FechaFinal", "Flete", "Anticipo" })
-            {
-                errores.TryGetProperty(campo, out _).ShouldBeTrue($"Falta el error de {campo}");
-            }
+            (await r.JsonAsync()).GetProperty("errors").TryGetProperty("ViajeId", out _).ShouldBeTrue();
         }
     }
 
@@ -430,10 +444,12 @@ public class PlanillasIntegracionTests
             datos.GetProperty("confianzaPromedio").GetSingle().ShouldBe(0.85f);
             var jsonOcr = datos.GetProperty("jsonOcrCrudo").GetString();
 
-            var conductor = "CONDUCTOR " + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+            // OcrFalso siempre devuelve la placa WCN410: el viaje se siembra con esa misma placa
+            // para que esta prueba se concentre en el jsonOcrCrudo, no en la advertencia de placa.
+            var viajeId = await SembrarViajeAsync(datos.GetProperty("placa").GetString());
             var r = await cliente.PostAsync("/api/planillas", new
             {
-                placa = datos.GetProperty("placa").GetString(), conductor,
+                viajeId, placa = datos.GetProperty("placa").GetString(),
                 origen = datos.GetProperty("origen").GetString(), destino = datos.GetProperty("destino").GetString(),
                 fechaInicial = "2026-11-01", fechaFinal = "2026-11-05",
                 flete = 6_976_800m, anticipo = datos.GetProperty("anticipo").GetDecimal(),
@@ -462,10 +478,10 @@ public class PlanillasIntegracionTests
         {
             foreach (var jsonMalo in new[] { "{no es json", "[" + new string(' ', LogisticaBackend.Domain.Services.JsonOcrCrudo.TamanoMaximoBytes) + "]" })
             {
-                var conductor = "CONDUCTOR " + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+                var viajeId = await SembrarViajeAsync();
                 var r = await cliente.PostAsync("/api/planillas", new
                 {
-                    placa = "WCN410", conductor, origen = "BOGOTA", destino = "MEDELLIN",
+                    viajeId, origen = "BOGOTA", destino = "MEDELLIN",
                     fechaInicial = "2026-11-01", fechaFinal = "2026-11-05", flete = 1_000m, anticipo = 0m,
                     gastos = new[] { new { concepto = "PEAJES", valor = 100m } },
                     jsonOcrCrudo = jsonMalo,
@@ -482,9 +498,10 @@ public class PlanillasIntegracionTests
         var (cliente, _) = await Sembrador.SesionAsync(_fabrica, Roles.Revisor);
         using (cliente)
         {
+            var viajeId = await SembrarViajeAsync();
             var r = await cliente.PostAsync("/api/planillas", new
             {
-                placa = "WCN410", conductor = "SIN CSRF", origen = "BOGOTA", destino = "MEDELLIN",
+                viajeId, origen = "BOGOTA", destino = "MEDELLIN",
                 fechaInicial = "2026-11-01", fechaFinal = "2026-11-05", flete = 1_000m, anticipo = 0m,
                 gastos = new[] { new { concepto = "PEAJES", valor = 100m } },
                 jsonOcrCrudo = OcrFalso.JsonOcrCrudoFalso,

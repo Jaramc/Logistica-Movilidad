@@ -25,6 +25,7 @@ public class PlanillasControllerTests
     private readonly Mock<IExcelExportService> _excelServiceMock = new();
     private readonly Mock<ILogger<PlanillasController>> _loggerMock = new();
     private readonly Mock<IAuditoriaService> _auditoriaMock = new();
+    private readonly Mock<ICuentaConductorService> _cuentaMock = new();
 
     /// <summary>Servicios mínimos para que el controlador pueda crear ProblemDetails.</summary>
     private static readonly Lazy<IServiceProvider> ServiciosMvc = new(() =>
@@ -43,6 +44,8 @@ public class PlanillasControllerTests
             .Options;
         var context = new AppDbContext(options);
 
+        _cuentaMock.Setup(c => c.ObtenerSaldoAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync(0m);
+
         var usuario = new ClaimsPrincipal(new ClaimsIdentity(
             new[] { new Claim(ClaimTypes.NameIdentifier, UsuarioId.ToString()) }, "Prueba"));
 
@@ -52,6 +55,7 @@ public class PlanillasControllerTests
             context,
             new RelojFijo(new DateTimeOffset(2026, 11, 13, 15, 0, 0, TimeSpan.Zero)),
             _auditoriaMock.Object,
+            _cuentaMock.Object,
             Microsoft.Extensions.Options.Options.Create(new LiquidacionesOptions()),
             _loggerMock.Object
         )
@@ -65,15 +69,32 @@ public class PlanillasControllerTests
         return (controller, context);
     }
 
-    private static GuardarPlanillaDto DtoPlanillaReal() => new(
-        Placa: "wcn-410",
-        Conductor: "PEDRO PEREZ",
+    /// <summary>Siembra un conductor, un vehículo y un viaje Abierto (bloques 1 y 4 de la fase 1).</summary>
+    private static async Task<(int ViajeId, int ConductorId)> SembrarViajeAsync(
+        AppDbContext context, string placa = "WCN410", string conductorNombre = "PEDRO PEREZ")
+    {
+        var conductor = new Conductor { Codigo = "C01", NombreCompleto = conductorNombre, Cedula = "1000000001" };
+        var vehiculo = new Vehiculo { Placa = placa, Tipo = "Tractomula" };
+        context.Conductores.Add(conductor);
+        context.Vehiculos.Add(vehiculo);
+        await context.SaveChangesAsync();
+
+        var viaje = new Viaje
+        {
+            ConductorId = conductor.Id, VehiculoId = vehiculo.Id, Origen = "BOGOTA", Destino = "MEDELLIN",
+            Cliente = "CLIENTE PRUEBA", FechaInicio = new DateOnly(2026, 11, 1), Estado = EstadoViaje.Abierto,
+        };
+        context.Viajes.Add(viaje);
+        await context.SaveChangesAsync();
+        return (viaje.Id, conductor.Id);
+    }
+
+    private static GuardarPlanillaDto DtoPlanillaReal(int viajeId) => new(
+        ViajeId: viajeId,
         Origen: "BOGOTA",
         Destino: "MEDELLIN",
         FechaInicial: new DateOnly(2026, 11, 1),
         FechaFinal: new DateOnly(2026, 11, 5),
-        Manifiesto: "MAN-1234",
-        EmpresaTransportadora: "LOGISTICA S.A.S.",
         Flete: 6976800m,
         Anticipo: 2800000m,
         Gastos: new List<GastoItemDto>
@@ -82,22 +103,29 @@ public class PlanillasControllerTests
             new("PAPELERIA", 32900m),
             new("PEAJES", 1500000m),
             new("ACPM", 1158300m)
-        }
+        },
+        Manifiesto: "MAN-1234",
+        EmpresaTransportadora: "LOGISTICA S.A.S."
     );
 
     [Fact]
     public async Task GuardarPlanilla_RecalculaTotalesEnServidorYAsignaAutoria()
     {
         var (controller, context) = CrearControllerConDb();
+        var (viajeId, _) = await SembrarViajeAsync(context);
 
-        var result = await controller.GuardarPlanilla(DtoPlanillaReal(), CancellationToken.None);
+        var result = await controller.GuardarPlanilla(DtoPlanillaReal(viajeId), CancellationToken.None);
 
         var created = result.ShouldBeOfType<CreatedAtActionResult>();
         created.StatusCode.ShouldBe(StatusCodes.Status201Created);
 
         var planilla = await context.Planillas.Include(p => p.Gastos).SingleAsync();
-        planilla.Placa.ShouldBe("WCN410"); // normalizada
+        // Placa y conductor salen del viaje, no del cuerpo de la petición (el DTO ya no los trae).
+        planilla.Placa.ShouldBe("WCN410");
+        planilla.Conductor.ShouldBe("PEDRO PEREZ");
+        planilla.ViajeId.ShouldBe(viajeId);
         planilla.TotalGastos.ShouldBe(2869200m);
+        planilla.SaldoAnterior.ShouldBe(0m); // ObtenerSaldoAsync mockeado en 0 (conductor sin movimientos)
         planilla.SaldoViaje.ShouldBe(69200m);
         planilla.SaldoTotal.ShouldBe(69200m);
         planilla.Gastos.Count.ShouldBe(4);
@@ -109,129 +137,99 @@ public class PlanillasControllerTests
     }
 
     [Fact]
-    public async Task GuardarPlanilla_TomaElSaldoAnteriorDeLaUltimaPlanillaDelConductor()
+    public async Task GuardarPlanilla_PrimeraPlanillaDeUnViajeAbierto_LoPasaAEnRevision()
     {
         var (controller, context) = CrearControllerConDb();
-        context.Planillas.AddRange(
-            new PlanillaViaje { Placa = "WCN410", Conductor = "PEDRO PEREZ", FechaInicial = new DateOnly(2026, 9, 1),
-                FechaFinal = new DateOnly(2026, 9, 5), SaldoTotal = -2_610_054m },
-            new PlanillaViaje { Placa = "WCN410", Conductor = "PEDRO PEREZ", FechaInicial = new DateOnly(2026, 10, 1),
-                FechaFinal = new DateOnly(2026, 10, 5), SaldoTotal = -150_000m },   // la más reciente
-            new PlanillaViaje { Placa = "ABC123", Conductor = "OTRO CONDUCTOR", FechaInicial = new DateOnly(2026, 10, 20),
-                FechaFinal = new DateOnly(2026, 10, 25), SaldoTotal = 999_999m });
-        await context.SaveChangesAsync();
+        var (viajeId, _) = await SembrarViajeAsync(context);
 
-        // Mismo conductor escrito distinto: debe reconocerse.
-        var result = await controller.GuardarPlanilla(DtoPlanillaReal() with { Conductor = "  pedro   perez " }, CancellationToken.None);
+        await controller.GuardarPlanilla(DtoPlanillaReal(viajeId), CancellationToken.None);
+
+        var viaje = await context.Viajes.SingleAsync(v => v.Id == viajeId);
+        viaje.Estado.ShouldBe(EstadoViaje.EnRevision);
+    }
+
+    [Fact]
+    public async Task GuardarPlanilla_TomaElSaldoDeLaCuentaDelConductor_YPermiteSaldosNegativos()
+    {
+        var (controller, context) = CrearControllerConDb();
+        var (viajeId, conductorId) = await SembrarViajeAsync(context);
+        _cuentaMock.Setup(c => c.ObtenerSaldoAsync(conductorId, It.IsAny<CancellationToken>())).ReturnsAsync(-150_000m);
+
+        var result = await controller.GuardarPlanilla(DtoPlanillaReal(viajeId), CancellationToken.None);
 
         result.ShouldBeOfType<CreatedAtActionResult>();
-        var nueva = await context.Planillas.OrderByDescending(p => p.Id).FirstAsync();
-        nueva.Conductor.ShouldBe("PEDRO PEREZ");
+        var nueva = await context.Planillas.SingleAsync();
         nueva.SaldoAnterior.ShouldBe(-150_000m);
         nueva.SaldoViaje.ShouldBe(69_200m);
         nueva.SaldoTotal.ShouldBe(-80_800m); // los saldos pueden quedar negativos
     }
 
     [Fact]
-    public async Task GuardarPlanilla_PrimeraDelConductor_ConSaldoInicialConfirmado_UsaElSaldoEscrito()
+    public async Task GuardarPlanilla_SaldoAnteriorDeclaradoDifiereDelSaldoRealDelConductor_Advierte()
     {
         var (controller, context) = CrearControllerConDb();
+        var (viajeId, conductorId) = await SembrarViajeAsync(context);
+        _cuentaMock.Setup(c => c.ObtenerSaldoAsync(conductorId, It.IsAny<CancellationToken>())).ReturnsAsync(-150_000m);
 
-        // Planilla real: 69.200 del viaje − 63.500 a favor de la empresa = 5.700 a favor del conductor.
-        var result = await controller.GuardarPlanilla(DtoPlanillaReal() with
-        {
-            SaldoAnteriorDeclarado = -63_500m,
-            UsarSaldoAnteriorDeclarado = true,
-        }, CancellationToken.None);
-
-        var created = result.ShouldBeOfType<CreatedAtActionResult>();
-        var cuerpo = created.Value.ShouldBeOfType<PlanillaGuardadaDto>();
-        cuerpo.Advertencias!.ShouldContain(a => a.StartsWith("Primera planilla del conductor en el sistema"));
-        var nueva = await context.Planillas.SingleAsync();
-        nueva.SaldoAnterior.ShouldBe(-63_500m);
-        nueva.SaldoViaje.ShouldBe(69_200m);
-        nueva.SaldoTotal.ShouldBe(5_700m);
-        nueva.TieneDiferencias.ShouldBeFalse();
-    }
-
-    [Fact]
-    public async Task GuardarPlanilla_PrimeraDelConductor_SinConfirmar_ArrancaEnCero()
-    {
-        var (controller, context) = CrearControllerConDb();
-
-        await controller.GuardarPlanilla(DtoPlanillaReal() with { SaldoAnteriorDeclarado = -63_500m }, CancellationToken.None);
-
-        var nueva = await context.Planillas.SingleAsync();
-        nueva.SaldoAnterior.ShouldBe(0m);
-        nueva.SaldoTotal.ShouldBe(69_200m);
-        nueva.TieneDiferencias.ShouldBeTrue();
-    }
-
-    [Fact]
-    public async Task GuardarPlanilla_ConductorConHistorial_IgnoraElSaldoInicialYAdvierte()
-    {
-        var (controller, context) = CrearControllerConDb();
-        context.Planillas.Add(new PlanillaViaje { Placa = "WCN410", Conductor = "PEDRO PEREZ",
-            FechaInicial = new DateOnly(2026, 10, 1), FechaFinal = new DateOnly(2026, 10, 5), SaldoTotal = -150_000m });
-        await context.SaveChangesAsync();
-
-        var result = await controller.GuardarPlanilla(DtoPlanillaReal() with
-        {
-            SaldoAnteriorDeclarado = 999_999m,
-            UsarSaldoAnteriorDeclarado = true,
-        }, CancellationToken.None);
+        var result = await controller.GuardarPlanilla(
+            DtoPlanillaReal(viajeId) with { SaldoAnteriorDeclarado = -63_500m }, CancellationToken.None);
 
         var cuerpo = result.ShouldBeOfType<CreatedAtActionResult>().Value.ShouldBeOfType<PlanillaGuardadaDto>();
-        cuerpo.Advertencias!.ShouldContain(a => a.StartsWith("El conductor ya tiene planillas en el sistema"));
-        var nueva = await context.Planillas.OrderByDescending(p => p.Id).FirstAsync();
-        nueva.SaldoAnterior.ShouldBe(-150_000m);
+        cuerpo.Advertencias!.ShouldContain(a => a.Contains("difiere del saldo actual"));
+        var nueva = await context.Planillas.SingleAsync();
+        nueva.SaldoAnterior.ShouldBe(-150_000m); // manda el saldo real, no el declarado
     }
 
     [Fact]
-    public async Task GuardarPlanilla_MasAntiguaQueLaUltimaDelConductor_Advierte()
+    public async Task GuardarPlanilla_PlacaLeidaPorElOcrDistintaDeLaDelViaje_Advierte()
     {
         var (controller, context) = CrearControllerConDb();
-        context.Planillas.Add(new PlanillaViaje { Placa = "WCN410", Conductor = "PEDRO PEREZ",
-            FechaInicial = new DateOnly(2026, 11, 20), FechaFinal = new DateOnly(2026, 11, 25), SaldoTotal = 10_000m });
-        await context.SaveChangesAsync();
+        var (viajeId, _) = await SembrarViajeAsync(context, placa: "WCN410");
 
-        // DtoPlanillaReal va del 1 al 5 de noviembre: es anterior a la que ya está guardada.
-        var result = await controller.GuardarPlanilla(DtoPlanillaReal(), CancellationToken.None);
+        var result = await controller.GuardarPlanilla(DtoPlanillaReal(viajeId) with { Placa = "ZZZ999" }, CancellationToken.None);
 
         var cuerpo = result.ShouldBeOfType<CreatedAtActionResult>().Value.ShouldBeOfType<PlanillaGuardadaDto>();
-        cuerpo.Advertencias!.ShouldContain(a => a.StartsWith("Ya existe una planilla de este conductor que termina después de esta"));
+        cuerpo.Advertencias!.ShouldContain(a => a.Contains("ZZZ999") && a.Contains("WCN410"));
+        (await context.Planillas.SingleAsync()).Placa.ShouldBe("WCN410"); // la del viaje manda, no la del OCR
     }
 
     [Fact]
-    public async Task ObtenerConductores_DevuelveLosNombresSinRepetir_DelMasRecienteAlMasAntiguo()
+    public async Task GuardarPlanilla_ViajeInexistente_Retorna404()
+    {
+        var (controller, _) = CrearControllerConDb();
+
+        var result = await controller.GuardarPlanilla(DtoPlanillaReal(999_999), CancellationToken.None);
+
+        result.ShouldBeOfType<ObjectResult>().StatusCode.ShouldBe(StatusCodes.Status404NotFound);
+    }
+
+    [Fact]
+    public async Task GuardarPlanilla_ViajeYaTienePlanilla_Retorna409()
     {
         var (controller, context) = CrearControllerConDb();
-        context.Planillas.AddRange(
-            new PlanillaViaje { Placa = "WCN410", Conductor = "PEDRO PEREZ", FechaInicial = new DateOnly(2026, 9, 1), FechaFinal = new DateOnly(2026, 9, 5) },
-            new PlanillaViaje { Placa = "WCN410", Conductor = "PEDRO PEREZ", FechaInicial = new DateOnly(2026, 11, 1), FechaFinal = new DateOnly(2026, 11, 5) },
-            new PlanillaViaje { Placa = "ABC123", Conductor = "ANDRES GOMEZ", FechaInicial = new DateOnly(2026, 10, 1), FechaFinal = new DateOnly(2026, 10, 5) });
-        await context.SaveChangesAsync();
+        var (viajeId, _) = await SembrarViajeAsync(context);
+        (await controller.GuardarPlanilla(DtoPlanillaReal(viajeId), CancellationToken.None))
+            .ShouldBeOfType<CreatedAtActionResult>();
 
-        var result = await controller.ObtenerConductores(CancellationToken.None);
+        var segunda = await controller.GuardarPlanilla(DtoPlanillaReal(viajeId), CancellationToken.None);
 
-        result.ShouldBeOfType<OkObjectResult>().Value.ShouldBeOfType<List<string>>()
-            .ShouldBe(new List<string> { "PEDRO PEREZ", "ANDRES GOMEZ" });
+        segunda.ShouldBeOfType<ObjectResult>().StatusCode.ShouldBe(StatusCodes.Status409Conflict);
+        (await context.Planillas.CountAsync()).ShouldBe(1);
     }
 
     [Fact]
     public async Task GuardarPlanilla_SaldoFueraDelTope_Retorna422()
     {
         var (controller, context) = CrearControllerConDb();
-        context.Planillas.Add(new PlanillaViaje { Placa = "WCN410", Conductor = "PEDRO PEREZ",
-            FechaInicial = new DateOnly(2026, 10, 1), FechaFinal = new DateOnly(2026, 10, 5), SaldoTotal = -100_000_000m });
-        await context.SaveChangesAsync();
+        var (viajeId, conductorId) = await SembrarViajeAsync(context);
+        _cuentaMock.Setup(c => c.ObtenerSaldoAsync(conductorId, It.IsAny<CancellationToken>())).ReturnsAsync(-100_000_000m);
 
         // -100.000.000 + 69.200 está dentro; con un anticipo mayor el saldo total supera el tope negativo.
-        var result = await controller.GuardarPlanilla(DtoPlanillaReal() with { Anticipo = 3_000_000m }, CancellationToken.None);
+        var result = await controller.GuardarPlanilla(DtoPlanillaReal(viajeId) with { Anticipo = 3_000_000m }, CancellationToken.None);
 
         var obj = result.ShouldBeOfType<ObjectResult>();
         obj.StatusCode.ShouldBe(StatusCodes.Status422UnprocessableEntity);
-        (await context.Planillas.CountAsync()).ShouldBe(1);
+        (await context.Planillas.CountAsync()).ShouldBe(0);
     }
 
     [Fact]

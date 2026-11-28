@@ -3,34 +3,33 @@ namespace LogisticaBackend.DTOs;
 /// <summary>
 /// Comando para guardar/aprobar una planilla (anti-overposting).
 /// No incluye Id, EstadoRevision, CreadoEn, autoría, totales ni SaldoAnterior: el servidor los
-/// asigna o calcula. SaldoAnterior sale del SaldoTotal de la última planilla del mismo conductor.
+/// asigna o calcula. El conductor y la placa de la entidad salen del viaje (ViajeId), no del
+/// cuerpo de la petición; Placa aquí es solo lo que leyó el OCR, para advertir si no coincide con
+/// la del viaje. SaldoAnterior sale del saldo actual de la cuenta corriente del conductor (ver
+/// CuentaConductorService), no de una cadena de planillas por nombre.
 /// Cualquier campo extra en el JSON (id, totalGastos, saldoAnterior, ...) se ignora.
 /// JsonOcrCrudo es la copia de auditoría que devolvió /extraer; el servidor la valida (tamaño y
 /// JSON) y si no cumple la guarda como null.
 /// </summary>
 public record GuardarPlanillaDto(
-    string Placa,
-    string Conductor,
+    int ViajeId,
     string Origen,
     string Destino,
     DateOnly FechaInicial,
     DateOnly FechaFinal,
-    string? Manifiesto,
-    string? EmpresaTransportadora,
     decimal Flete,
     decimal Anticipo,
     List<GastoItemDto> Gastos,
+    string? Placa = null,
+    string? Manifiesto = null,
+    string? EmpresaTransportadora = null,
     string? JsonOcrCrudo = null,
     // Valores escritos en papel, tal como los leyó el OCR (con signo: positivo = la empresa le debe
     // al conductor). Se guardan para auditoría y para marcar diferencias: nunca reemplazan el cálculo.
     decimal? TotalGastosDeclarado = null,
     decimal? SaldoViajeDeclarado = null,
     decimal? SaldoAnteriorDeclarado = null,
-    decimal? SaldoNuevoDeclarado = null,
-    // Solo para la PRIMERA planilla del conductor en el sistema (no hay saldo del cual encadenar):
-    // el revisor confirma que SaldoAnteriorDeclarado es el saldo inicial. Si el conductor ya tiene
-    // planillas se ignora y manda el SaldoTotal de la última.
-    bool UsarSaldoAnteriorDeclarado = false
+    decimal? SaldoNuevoDeclarado = null
 );
 
 /// <summary>
@@ -50,9 +49,6 @@ public record GastoItemDto(
 /// (p. ej. el saldo anterior escrito en papel difiere del calculado).
 /// </summary>
 public record PlanillaGuardadaDto(string Mensaje, int Id, PlanillaDetalleDto Data, List<string>? Advertencias = null);
-
-/// <summary>Saldo anterior que el servidor le asignará a la próxima planilla del conductor.</summary>
-public record SaldoAnteriorDto(string Conductor, decimal SaldoAnterior, int? PlanillaAnteriorId);
 
 /// <summary>Filtros y paginación del historial. Tamaño máximo de página: 100.</summary>
 public sealed class ConsultaPlanillasDto

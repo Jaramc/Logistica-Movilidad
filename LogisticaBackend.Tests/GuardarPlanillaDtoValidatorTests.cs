@@ -14,8 +14,7 @@ public class GuardarPlanillaDtoValidatorTests
         new RelojFijo(new DateTimeOffset(2026, 11, 13, 15, 0, 0, TimeSpan.Zero)));
 
     private static GuardarPlanillaDto CrearDtoValido() => new(
-        Placa: "WCN410",
-        Conductor: "PEDRO PEREZ",
+        ViajeId: 1,
         Origen: "BOGOTA",
         Destino: "MEDELLIN",
         FechaInicial: new DateOnly(2026, 11, 1),
@@ -27,6 +26,7 @@ public class GuardarPlanillaDtoValidatorTests
             new("PARQUEO", 178000m),
             new("PEAJES", 1500000m)
         },
+        Placa: "WCN410",
         Manifiesto: "MAN-1234",
         EmpresaTransportadora: "LOGISTICA S.A.S."
     );
@@ -131,17 +131,25 @@ public class GuardarPlanillaDtoValidatorTests
         resultado.Errors.ShouldContain(e => e.PropertyName.StartsWith("Gastos") && e.ErrorMessage.Contains("No se permite incluir 'FLETE' o 'ANTICIPO'"));
     }
 
+    // Bloque 5 (fase 1): la placa del DTO ya no es la del vehículo (esa sale del viaje), es solo lo
+    // que leyó el OCR para comparar y advertir si no coincide; por eso ahora es opcional.
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
     [InlineData(null)]
-    public void Validar_PlacaInvalida_EsRechazada(string? placaInvalida)
+    public void Validar_PlacaVacia_EsValida(string? placaVacia)
     {
-        var dto = CrearDtoValido() with { Placa = placaInvalida! };
-        var resultado = _validator.Validate(dto);
+        var dto = CrearDtoValido() with { Placa = placaVacia };
+        _validator.Validate(dto).Errors.ShouldNotContain(e => e.PropertyName == "Placa");
+    }
 
-        resultado.IsValid.ShouldBeFalse();
-        resultado.Errors.ShouldContain(e => e.PropertyName == "Placa");
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Validar_ViajeIdInvalido_EsRechazado(int viajeId)
+    {
+        var dto = CrearDtoValido() with { ViajeId = viajeId };
+        _validator.Validate(dto).Errors.ShouldContain(e => e.PropertyName == "ViajeId");
     }
 
     [Fact]
