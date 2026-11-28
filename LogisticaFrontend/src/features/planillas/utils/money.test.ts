@@ -57,6 +57,51 @@ describe('money.ts - Utilidades Financieras COP y Precisión Contable', () => {
     });
   });
 
+  // Mismos casos que MontoParserTests.ParseCop_CasosCompartidosConElFrontend en el backend.
+  // Si agregas uno, agrégalo en los dos.
+  describe('parseCOP — casos compartidos con MontoParser', () => {
+    const casos: Array<[string | null, string]> = [
+      ['$ 1.500.000', '1500000'],
+      ['1.500.000,50', '1500000.5'],
+      ['1,500,000.50', '1500000.5'],
+      ['12,50', '12.5'],
+      ['12.50', '12.5'],
+      ['12,5', '12.5'],
+      ['150.000', '150000'],
+      ['1,500', '1500'],
+      ['-50.000', '-50000'],
+      ['- 50.000', '-50000'],
+      ['(50.000)', '-50000'],
+      ['-$ 150.000', '-150000'],
+      ['$ -150.000', '-150000'],
+      ['COP -20.000', '-20000'],
+      ['cop 20.000', '20000'],
+      ['COP 2024-11', '202411'],
+      ['50.000-', '50000'],
+      ['(50.000', '50000'],
+      ['', '0'],
+      ['   ', '0'],
+      [null, '0'],
+      ['abc', '0'],
+      ['-', '0'],
+    ];
+
+    it.each(casos)('parseCOP(%j) = %s', (entrada, esperado) => {
+      expect(parseCOP(entrada).toString()).toBe(esperado);
+    });
+
+    it.each(['COP 2024-11', 'Peaje 12-34', '50.000-', '2024-11'])(
+      'un guion que no está al inicio no vuelve negativo: %j',
+      (entrada) => {
+        expect(parseCOP(entrada).gte(0)).toBe(true);
+      },
+    );
+
+    it('redondea a 2 decimales con la mitad hacia arriba', () => {
+      expect(parseCOP('1,005.125').toString()).toBe('1005.13');
+    });
+  });
+
   describe('formatCOP - Visualización en pesos colombianos', () => {
     it('formatea montos a moneda COP sin decimales por defecto', () => {
       const resultado = formatCOP(2800000);
@@ -122,3 +167,21 @@ describe('money.ts - Utilidades Financieras COP y Precisión Contable', () => {
   });
 });
 
+
+import { aFavorDe, describirSaldo } from './money';
+
+describe('aFavorDe / describirSaldo — convención de signo de los saldos', () => {
+  it.each([
+    [69200, 'Conductor'],
+    [-63500, 'Empresa'],
+    ['5.700', 'Conductor'],
+    [0, null],
+  ] as const)('%s → %s', (saldo, esperado) => {
+    expect(aFavorDe(saldo)).toBe(esperado);
+  });
+
+  it('describe el saldo en valor absoluto y a favor de quién', () => {
+    expect(describirSaldo(-63500)).toMatch(/63\.500 a favor de la empresa$/);
+    expect(describirSaldo(5700)).toMatch(/5\.700 a favor del conductor$/);
+  });
+});

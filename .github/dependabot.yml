@@ -1,0 +1,32 @@
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directories:
+      - /LogisticaBackend
+      - /LogisticaBackend.Tests
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      menores-y-parches:
+        update-types: [minor, patch]
+    labels: [dependencias, backend]
+
+  - package-ecosystem: npm
+    directory: /LogisticaFrontend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      menores-y-parches:
+        update-types: [minor, patch]
+    labels: [dependencias, frontend]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencias, ci]

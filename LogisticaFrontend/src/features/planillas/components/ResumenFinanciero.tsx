@@ -1,19 +1,33 @@
 import React from 'react';
-import { formatCOP, type CalculoFinanciero } from '../utils/money';
-import Big from 'big.js';
+import { aFavorDe, formatCOP, type CalculoFinanciero } from '../utils/money';
+import Big, { type BigSource } from 'big.js';
 
 export interface ResumenFinancieroProps {
   flete: number | string;
   anticipo: number | string;
   calculo: CalculoFinanciero;
   cantidadGastos: number;
+  /** Saldo anterior que asigna el servidor (con signo). */
+  saldoAnterior?: BigSource;
 }
+
+/** "a favor de: Conductor" / "a favor de: Empresa" según el signo (positivo = la empresa le debe al conductor). */
+const AFavor: React.FC<{ saldo: BigSource; className?: string }> = ({ saldo, className }) => {
+  const quien = aFavorDe(saldo);
+  if (!quien) return <span className={className}>Sin saldo pendiente</span>;
+  return (
+    <span className={className} data-testid="a-favor-de">
+      a favor de: <strong>{quien}</strong>
+    </span>
+  );
+};
 
 export const ResumenFinanciero: React.FC<ResumenFinancieroProps> = ({
   flete,
   anticipo,
   calculo,
   cantidadGastos,
+  saldoAnterior = 0,
 }) => {
   const fleteBig = new Big(flete || 0);
   const anticipoBig = new Big(anticipo || 0);
@@ -84,21 +98,25 @@ export const ResumenFinanciero: React.FC<ResumenFinancieroProps> = ({
             Saldo del Viaje
           </p>
           <p className="text-base font-bold font-mono mt-1">
-            {formatCOP(calculo.saldoViaje)}
+            {formatCOP(calculo.saldoViaje.abs())}
           </p>
-          <span className="text-[10px] opacity-75 block mt-0.5">Gastos − Anticipo</span>
+          <AFavor saldo={calculo.saldoViaje} className="text-[10px] block mt-0.5" />
+          <span className="text-[10px] opacity-75 block">Gastos − Anticipo</span>
         </div>
 
         {/* 5. Saldo Total Definitivo */}
         <div className="p-3 bg-emerald-50/80 rounded-xl border border-emerald-200 col-span-2 lg:col-span-1">
           <p className="text-[11px] font-semibold text-emerald-800 uppercase tracking-wide">Saldo Total</p>
           <p className="text-base font-bold text-emerald-900 font-mono mt-1">
-            {formatCOP(calculo.saldoTotal)}
+            {formatCOP(calculo.saldoTotal.abs())}
           </p>
-          <span className="text-[10px] text-emerald-700 block mt-0.5">Saldo Viaje + Anterior</span>
+          <AFavor saldo={calculo.saldoTotal} className="text-[10px] text-emerald-800 block mt-0.5" />
+          <span className="text-[10px] text-emerald-700 block" data-testid="saldo-anterior-servidor">
+            Saldo Viaje + Anterior ({formatCOP(new Big(saldoAnterior || 0).abs())}
+            {aFavorDe(saldoAnterior) ? ` a favor de: ${aFavorDe(saldoAnterior)}` : ''})
+          </span>
         </div>
       </div>
     </div>
   );
 };
-

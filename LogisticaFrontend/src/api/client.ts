@@ -1,8 +1,55 @@
 import { ApiError, type ProblemDetails } from './types';
 
-export const API_BASE_URL: string = (
-  import.meta.env.VITE_API_URL || 'http://localhost:5098'
-).replace(/\/+$/, '');
+/**
+ * Por defecto la API se consume en el MISMO origen (rutas relativas /api/...):
+ * en desarrollo a través del proxy de Vite y en producción a través de Caddy.
+ * Así la cookie de sesión (__Host-, SameSite=Strict) y la cookie XSRF-TOKEN funcionan sin CORS.
+ */
+export const API_BASE_URL: string = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+
+export const CSRF_COOKIE = 'XSRF-TOKEN';
+export const CSRF_HEADER = 'X-XSRF-TOKEN';
+const METODOS_SEGUROS = new Set(['GET', 'HEAD', 'OPTIONS', 'TRACE']);
+
+/**
+ * Rutas donde un 401 es una respuesta normal (credenciales incorrectas o sin sesión todavía)
+ * y NO significa que la sesión haya expirado.
+ */
+const RUTAS_401_ESPERADO = [
+  '/api/auth/login',
+  '/api/auth/login-2fa',
+  '/api/auth/login-recuperacion',
+  '/api/auth/me',
+];
+
+type OyenteSesion = () => void;
+const oyentesSesionExpirada = new Set<OyenteSesion>();
+
+/** Se suscribe al evento "la sesión expiró" (401 en una ruta protegida). Devuelve la función para desuscribirse. */
+export function alExpirarSesion(oyente: OyenteSesion): () => void {
+  oyentesSesionExpirada.add(oyente);
+  return () => oyentesSesionExpirada.delete(oyente);
+}
+
+function notificarSesionExpirada(endpoint: string): void {
+  const ruta = endpoint.split('?')[0];
+  if (RUTAS_401_ESPERADO.includes(ruta ?? '')) return;
+  oyentesSesionExpirada.forEach((oyente) => oyente());
+}
+
+/** Lee la cookie XSRF-TOKEN que entrega el backend (no es HttpOnly a propósito). */
+export function leerTokenCsrf(): string | null {
+  const par = document.cookie
+    .split(';')
+    .map((c) => c.trim())
+    .find((c) => c.startsWith(`${CSRF_COOKIE}=`));
+  return par ? decodeURIComponent(par.slice(CSRF_COOKIE.length + 1)) : null;
+}
+
+/** Pide al backend una cookie XSRF-TOKEN nueva. */
+export async function renovarTokenCsrf(): Promise<void> {
+  await fetch(`${API_BASE_URL}/api/auth/antiforgery`, { method: 'GET', credentials: 'include' });
+}
 
 const DEFAULT_TIMEOUT_MS = 60000; // 60 segundos para operaciones de IA OCR
 
@@ -24,7 +71,12 @@ export async function apiClient<T>(endpoint: string, options: FetchOptions = {})
     ...restOptions
   } = options;
 
-  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+  if (!endpoint.startsWith('/')) {
+    // Nunca se envían credenciales a URLs absolutas arbitrarias.
+    throw new Error(`Ruta de API inválida: ${endpoint}`);
+  }
+  const url = `${API_BASE_URL}${endpoint}`;
+  const metodo = (restOptions.method ?? 'GET').toUpperCase();
 
   // Combinación de AbortSignals para soportar cancelación de usuario y timeout
   const timeoutController = new AbortController();
@@ -57,8 +109,19 @@ export async function apiClient<T>(endpoint: string, options: FetchOptions = {})
   headers.set('Accept', 'application/json, application/problem+json');
 
   try {
+    if (!METODOS_SEGUROS.has(metodo)) {
+      let token = leerTokenCsrf();
+      if (!token) {
+        await renovarTokenCsrf();
+        token = leerTokenCsrf();
+      }
+      if (token) headers.set(CSRF_HEADER, token);
+    }
+
     const respuesta = await fetch(url, {
       ...restOptions,
+      method: metodo,
+      credentials: 'include',
       headers,
       body: payload,
       signal: combinedSignal,
@@ -67,6 +130,7 @@ export async function apiClient<T>(endpoint: string, options: FetchOptions = {})
     clearTimeout(timeoutId);
 
     if (!respuesta.ok) {
+      if (respuesta.status === 401) notificarSesionExpirada(endpoint);
       await parsearYRechazarError(respuesta);
     }
 

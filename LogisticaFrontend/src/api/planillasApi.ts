@@ -1,19 +1,20 @@
 import { apiClient } from './client';
 import { 
   PlanillaOcrResponseSchema, 
+  PagedPlanillasSchema,
   type PlanillaOcrResponse,
-  type GuardarPlanillaDto 
+  type GuardarPlanillaDto,
+  type PagedPlanillas
 } from '../features/planillas/schemas/planillaSchema';
 
 /**
  * Servicio de API para el módulo de Planillas y Liquidaciones.
- * Centraliza las rutas hacia el backend con tipado estricto y validación Zod en el borde.
+ * Utiliza exclusivamente las rutas canónicas del backend (.NET 10 PlanillasController).
  */
 
 /**
  * 1. Extracción de Planilla con Azure AI Document Intelligence
- * Contrato Objetivo: POST /api/planillas/extraer (campo 'file')
- * TODO(contrato): Ajustar cuando el backend unifique la ruta a /api/planillas/extraer.
+ * Ruta canónica: POST /api/planillas/extraer (multipart/form-data con campo 'file')
  */
 export async function extraerPlanillaOcrApi(
   archivo: File,
@@ -21,122 +22,123 @@ export async function extraerPlanillaOcrApi(
 ): Promise<PlanillaOcrResponse> {
   const formData = new FormData();
   formData.append('file', archivo);
-  // Compatibilidad temporal con el endpoint legacy de liquidaciones
-  formData.append('imagen', archivo);
 
-  let rawResponse: unknown;
-
-  try {
-    // 1. Intentar endpoint de la planilla
-    rawResponse = await apiClient<unknown>('/api/planilla/procesar-ocr', {
-      method: 'POST',
-      body: formData,
-      signal,
-    });
-  } catch (error: any) {
-    // Si el endpoint devuelve 404, intentar fallback
-    if (error.status === 404) {
-      rawResponse = await apiClient<unknown>('/api/liquidaciones/extraer-datos', {
-        method: 'POST',
-        body: formData,
-        signal,
-      });
-    } else {
-      throw error;
-    }
-  }
+  const rawResponse = await apiClient<unknown>('/api/planillas/extraer', {
+    method: 'POST',
+    body: formData,
+    signal,
+  });
 
   // Validación estricta en el borde (Runtime Boundary Validation con Zod)
+  // Validación estricta en el borde: si el contrato no coincide, se informa el error (sin "respaldos" legacy).
   const parseResult = PlanillaOcrResponseSchema.safeParse(rawResponse);
   if (!parseResult.success) {
-    console.error('Error de contrato al validar respuesta de OCR:', parseResult.error);
-    // Si la estructura no encaja exactamente, intentamos un objeto normalizado seguro
-    const fallbackData = (rawResponse as any)?.data || (rawResponse as any)?.datos || {};
-    return {
-      mensaje: (rawResponse as any)?.mensaje ?? 'Datos procesados parcialmente',
-      data: {
-        placa: String(fallbackData.placa ?? '').toUpperCase(),
-        origen: String(fallbackData.origen ?? fallbackData.origenViaje ?? ''),
-        destino: String(fallbackData.destino ?? ''),
-        flete: Number(fallbackData.flete ?? 0),
-        anticipo: Number(fallbackData.anticipo ?? 0),
-        totalGastos: Number(fallbackData.totalGastos ?? 0),
-        saldoViaje: Number(fallbackData.saldoViaje ?? 0),
-        detalleGastos: Array.isArray(fallbackData.detalleGastos)
-          ? fallbackData.detalleGastos.map((g: any) => ({
-              concepto: String(g.concepto || g.Concepto || 'Gasto'),
-              valor: Number(g.valor || g.Valor || 0),
-            }))
-          : [],
-      },
-    };
+    throw new Error('La respuesta del OCR no tiene el formato esperado.');
   }
 
   return parseResult.data;
 }
 
-/**
- * 2. Guardar Planilla Aprobada en Base de Datos
- * Contrato Objetivo: POST /api/planillas con GuardarPlanillaDto
- * TODO(contrato): Cuando el backend aplique la migración de PlanillaViaje, apuntará directamente a POST /api/planillas.
- */
-export async function guardarPlanillaApi(
-  dto: GuardarPlanillaDto,
-  signal?: AbortSignal
-): Promise<{ mensaje: string; id?: number }> {
-  // Mapper de compatibilidad para el backend actual (POST /api/liquidaciones/guardar)
-  const legacyPayload = {
-    ...dto,
-    origenViaje: dto.origen,
-    jsonOcrCrudo: JSON.stringify(dto),
-  };
+/** Respuesta de guardar: totales calculados por el servidor y advertencias (p. ej. saldo anterior distinto). */
+export interface PlanillaGuardada {
+  mensaje: string;
+  id: number;
+  data: { placa: string; totalGastos: number; saldoViaje: number; saldoAnterior: number; saldoTotal: number };
+  advertencias?: string[] | null;
+}
 
-  try {
-    return await apiClient<{ mensaje: string; id?: number }>('/api/liquidaciones/guardar', {
-      method: 'POST',
-      body: legacyPayload,
-      signal,
-    });
-  } catch (error: any) {
-    if (error.status === 404) {
-      return await apiClient<{ mensaje: string; id?: number }>('/api/planillas', {
-        method: 'POST',
-        body: dto,
-        signal,
-      });
-    }
-    throw error;
-  }
+export interface SaldoAnterior {
+  conductor: string;
+  /** Con signo: positivo = la empresa le debe al conductor. */
+  saldoAnterior: number;
+  planillaAnteriorId: number | null;
 }
 
 /**
- * 3. Descarga de Consolidado Excel
- * Contrato Objetivo: GET /api/planillas/descargar-consolidado
+ * Conductores que ya tienen planillas (nombres normalizados, del más reciente al más antiguo).
+ * Ruta: GET /api/planillas/conductores
  */
-export async function descargarConsolidadoApi(signal?: AbortSignal): Promise<Blob> {
-  try {
-    return await apiClient<Blob>('/api/liquidaciones/descargar-consolidado', {
-      method: 'GET',
-      signal,
-    });
-  } catch (error: any) {
-    if (error.status === 404) {
-      return await apiClient<Blob>('/api/planillas/descargar-consolidado', {
-        method: 'GET',
-        signal,
-      });
-    }
-    throw error;
-  }
+export async function obtenerConductoresApi(signal?: AbortSignal): Promise<string[]> {
+  const datos = await apiClient<unknown>('/api/planillas/conductores', { method: 'GET', signal });
+  return Array.isArray(datos) ? datos.filter((d): d is string => typeof d === 'string') : [];
 }
 
 /**
- * 4. Obtener Historial de Liquidaciones Registradas
+ * Saldo anterior que el servidor asignará a la próxima planilla del conductor.
+ * Ruta: GET /api/planillas/saldo-anterior?conductor=
  */
-export async function obtenerHistorialApi(signal?: AbortSignal): Promise<unknown[]> {
-  return await apiClient<unknown[]>('/api/liquidaciones', {
+export async function obtenerSaldoAnteriorApi(conductor: string, signal?: AbortSignal): Promise<SaldoAnterior> {
+  const params = new URLSearchParams({ conductor });
+  return await apiClient<SaldoAnterior>(`/api/planillas/saldo-anterior?${params.toString()}`, {
     method: 'GET',
     signal,
   });
 }
 
+/**
+ * 2. Guardar Planilla Aprobada en Base de Datos
+ * Ruta: POST /api/planillas. No se envían totales: el servidor los calcula.
+ */
+export async function guardarPlanillaApi(
+  dto: GuardarPlanillaDto,
+  signal?: AbortSignal
+): Promise<PlanillaGuardada> {
+  return await apiClient<PlanillaGuardada>('/api/planillas', {
+    method: 'POST',
+    body: dto,
+    signal,
+  });
+}
+
+export interface RangoFechas {
+  /** Formato yyyy-MM-dd */
+  desde: string;
+  hasta: string;
+}
+
+/**
+ * 3. Descarga de Consolidado Excel (solo Administrador)
+ * Ruta: GET /api/planillas/descargar-consolidado?desde=&hasta= (máximo 1 año)
+ */
+export async function descargarConsolidadoApi(rango: RangoFechas, signal?: AbortSignal): Promise<Blob> {
+  const params = new URLSearchParams({ desde: rango.desde, hasta: rango.hasta });
+  return await apiClient<Blob>(`/api/planillas/descargar-consolidado?${params.toString()}`, {
+    method: 'GET',
+    signal,
+  });
+}
+
+export interface FiltrosHistorial {
+  desde?: string;
+  hasta?: string;
+  placa?: string;
+  conductor?: string;
+}
+
+/**
+ * 4. Historial paginado
+ * Ruta: GET /api/planillas?pagina=&tamano=&desde=&hasta=&placa=&conductor= (tamano máximo 100)
+ */
+export async function obtenerHistorialApi(
+  pagina: number = 1,
+  tamano: number = 20,
+  filtros: FiltrosHistorial = {},
+  signal?: AbortSignal
+): Promise<PagedPlanillas> {
+  const params = new URLSearchParams({ pagina: String(pagina), tamano: String(tamano) });
+  for (const [clave, valor] of Object.entries(filtros)) {
+    if (valor) params.set(clave, valor);
+  }
+
+  const rawResponse = await apiClient<unknown>(`/api/planillas?${params.toString()}`, {
+    method: 'GET',
+    signal,
+  });
+
+  const parseResult = PagedPlanillasSchema.safeParse(rawResponse);
+  if (!parseResult.success) {
+    throw new Error('Estructura de respuesta no válida al consultar historial de planillas');
+  }
+
+  return parseResult.data;
+}

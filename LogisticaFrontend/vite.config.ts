@@ -10,7 +10,17 @@ export default defineConfig({
     tailwindcss()
   ],
   server: {
-    port: 5173
+    port: 5173,
+    strictPort: true,
+    // Mismo origen en desarrollo: el navegador solo habla con Vite y Vite reenvía /api al backend.
+    // Igual que hará Caddy en producción. El certificado de desarrollo de .NET es autofirmado.
+    proxy: {
+      '/api': {
+        target: process.env.VITE_PROXY_TARGET ?? 'https://localhost:7216',
+        secure: false,
+        changeOrigin: false,
+      },
+    },
   },
   test: {
     globals: true,

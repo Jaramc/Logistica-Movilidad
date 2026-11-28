@@ -47,3 +47,21 @@ describe('ResumenFinanciero.tsx - Tarjetas y Semántica Accesible', () => {
   });
 });
 
+
+describe('ResumenFinanciero — a favor de quién', () => {
+  it('indica a favor de quién quedan el saldo del viaje y el saldo total, y muestra el saldo anterior', () => {
+    render(
+      <ResumenFinanciero
+        flete={6976800}
+        anticipo={2800000}
+        calculo={{ totalGastos: new Big(2869200), saldoViaje: new Big(69200), saldoTotal: new Big(5700) }}
+        cantidadGastos={17}
+        saldoAnterior={-63500}
+      />
+    );
+
+    const aFavor = screen.getAllByTestId('a-favor-de').map((e) => e.textContent);
+    expect(aFavor).toEqual(['a favor de: Conductor', 'a favor de: Conductor']);
+    expect(screen.getByTestId('saldo-anterior-servidor').textContent).toMatch(/63\.500 a favor de: Empresa/);
+  });
+});

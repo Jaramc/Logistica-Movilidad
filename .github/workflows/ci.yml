@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+# Mínimo privilegio: el workflow solo lee el repositorio.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  GITLEAKS_VERSION: 8.30.1
+
+jobs:
+  secretos:
+    name: Secretos (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # todo el historial
+      - name: Instalar gitleaks (binario verificado por checksum)
+        run: |
+          set -euo pipefail
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          archivo="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$archivo" "$base/$archivo"
+          curl -sSfL -o checksums.txt "$base/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          grep " $archivo\$" checksums.txt | sha256sum -c -
+          tar -xzf "$archivo" gitleaks
+      - name: Escanear todo el historial
+        run: ./gitleaks git --redact --verbose --log-opts="--all" .
+
+  backend:
+    name: Backend (.NET)
+    runs-on: ubuntu-latest # trae Docker: las pruebas de integración usan Testcontainers
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Restaurar
+        run: dotnet restore LogisticaBackend.Tests/LogisticaBackend.Tests.csproj
+      - name: Compilar (advertencias como errores)
+        run: dotnet build LogisticaBackend.Tests/LogisticaBackend.Tests.csproj --no-restore -c Release -warnaserror
+      - name: Pruebas (unitarias + integración con PostgreSQL real)
+        run: dotnet test LogisticaBackend.Tests/LogisticaBackend.Tests.csproj --no-build -c Release --logger "trx;LogFileName=resultados.trx"
+      - name: Migraciones al día con el modelo
+        run: |
+          dotnet tool restore
+          dotnet tool run dotnet-ef migrations has-pending-model-changes --project LogisticaBackend
+      - name: Paquetes NuGet vulnerables (falla con severidad alta o crítica)
+        run: |
+          set -euo pipefail
+          for proyecto in LogisticaBackend/LogisticaBackend.csproj LogisticaBackend.Tests/LogisticaBackend.Tests.csproj; do
+            dotnet list "$proyecto" package --vulnerable --include-transitive --format json > vuln.json
+            graves=$(jq '[.projects[].frameworks[]?.topLevelPackages[]?, .projects[].frameworks[]?.transitivePackages[]?
+                          | .vulnerabilities[]? | select(.severity == "High" or .severity == "Critical")] | length' vuln.json)
+            jq -r '.projects[].frameworks[]? | (.topLevelPackages[]?, .transitivePackages[]?)
+                   | select(.vulnerabilities) | "\(.id) \(.resolvedVersion): \([.vulnerabilities[].severity] | join(","))"' vuln.json || true
+            if [ "$graves" -gt 0 ]; then
+              echo "::error::$proyecto tiene $graves vulnerabilidades altas o críticas"
+              exit 1
+            fi
+          done
+
+  frontend:
+    name: Frontend (React)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: LogisticaFrontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: LogisticaFrontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - name: npm audit (falla con severidad alta o crítica)
+        run: npm audit --audit-level=high

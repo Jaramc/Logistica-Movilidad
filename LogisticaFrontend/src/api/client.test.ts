@@ -145,3 +145,63 @@ describe('client.ts - Cliente HTTP Unificado y Manejo RFC 7807', () => {
     await expect(apiClient('/api/test', { signal: controller.signal })).rejects.toThrow(ApiError);
   });
 });
+
+describe('client.ts - Protección CSRF y credenciales', () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    document.cookie = 'XSRF-TOKEN=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+    vi.restoreAllMocks();
+  });
+
+  const okJson = () => ({
+    ok: true,
+    status: 200,
+    headers: new Headers({ 'content-type': 'application/json' }),
+    json: async () => ({}),
+  });
+
+  it('envía X-XSRF-TOKEN y credentials: include en un POST', async () => {
+    document.cookie = 'XSRF-TOKEN=token-de-prueba; path=/';
+    const fetchMock = vi.fn().mockResolvedValue(okJson());
+    globalThis.fetch = fetchMock;
+
+    await apiClient('/api/planillas', { method: 'POST', body: { a: 1 } });
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe('/api/planillas');
+    expect(init.credentials).toBe('include');
+    expect((init.headers as Headers).get('X-XSRF-TOKEN')).toBe('token-de-prueba');
+  });
+
+  it('pide el token antiforgery si aún no existe la cookie', async () => {
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      if (url === '/api/auth/antiforgery') {
+        document.cookie = 'XSRF-TOKEN=nuevo; path=/';
+        return { ok: true, status: 204, headers: new Headers() };
+      }
+      return okJson();
+    });
+    globalThis.fetch = fetchMock;
+
+    await apiClient('/api/auth/login', { method: 'POST', body: { email: 'a', password: 'b' } });
+
+    expect(fetchMock.mock.calls[0]![0]).toBe('/api/auth/antiforgery');
+    expect((fetchMock.mock.calls[1]![1].headers as Headers).get('X-XSRF-TOKEN')).toBe('nuevo');
+  });
+
+  it('no envía el token en un GET', async () => {
+    document.cookie = 'XSRF-TOKEN=token-de-prueba; path=/';
+    const fetchMock = vi.fn().mockResolvedValue(okJson());
+    globalThis.fetch = fetchMock;
+
+    await apiClient('/api/planillas');
+
+    expect((fetchMock.mock.calls[0]![1].headers as Headers).has('X-XSRF-TOKEN')).toBe(false);
+  });
+
+  it('rechaza rutas absolutas para no enviar cookies a otros orígenes', async () => {
+    await expect(apiClient('https://otro-sitio.example/api')).rejects.toThrow();
+  });
+});
