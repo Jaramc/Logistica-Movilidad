@@ -22,6 +22,12 @@ public interface ICuentaConductorService
     /// <summary>Calcula el saldo del viaje (TotalGastos de la planilla − Σ traslados) y crea el movimiento CierreViaje.</summary>
     Task<CierreViajeResultado> CerrarViajeAsync(int viajeId, Guid? usuarioId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Revierte el CierreViaje de un viaje aprobado (crea un Ajuste exactamente contrario, ligado al
+    /// viaje) y lo deja Abierto. Solo si el viaje no tiene pagos registrados.
+    /// </summary>
+    Task<MovimientoSaldo> ReabrirViajeAsync(int viajeId, string motivo, Guid? usuarioId, CancellationToken cancellationToken = default);
+
     /// <summary>Crea el PagoSaldo y su movimiento. PagoEmpresa resta, DescuentoNomina suma (ambos valores siempre positivos).</summary>
     Task<MovimientoSaldo> RegistrarPagoAsync(
         int conductorId, int? viajeId, TipoPago tipo, decimal valor, DateOnly fecha,
@@ -35,13 +41,20 @@ public interface ICuentaConductorService
 
     Task<(IReadOnlyList<MovimientoSaldo> Items, int TotalCount)> ObtenerMovimientosAsync(
         int conductorId, int pagina, int tamano, CancellationToken cancellationToken = default);
+
+    /// <summary>Partidas con pendiente distinto de cero (Inicial, CierreViaje y Ajuste sin viaje), de la más antigua a la más nueva.</summary>
+    Task<IReadOnlyList<PartidaCuenta>> ObtenerPartidasPendientesAsync(int conductorId, CancellationToken cancellationToken = default);
+
+    /// <summary>Pendiente de la partida CierreViaje de un viaje concreto. Null si el viaje nunca se aprobó (sin CierreViaje).</summary>
+    Task<decimal?> ObtenerPendienteViajeAsync(int viajeId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
 /// Único punto que escribe en movimientos_saldo. Cada escritura bloquea la fila del conductor
 /// (SELECT ... FOR UPDATE) dentro de una transacción, para que dos movimientos simultáneos del
 /// mismo conductor nunca partan del mismo saldo. Convención de signo: positivo = la empresa le
-/// debe al conductor.
+/// debe al conductor. Después de cada movimiento se recalcula la compensación (CompensacionCuenta)
+/// y se sincroniza el estado (Aprobado/Saldado) de los viajes del conductor.
 /// </summary>
 public sealed class CuentaConductorService : ICuentaConductorService
 {
@@ -100,10 +113,9 @@ public sealed class CuentaConductorService : ICuentaConductorService
         var anticipoTraslados = CalculadoraLiquidacion.Redondear(viaje.Traslados.Sum(t => t.Valor));
         var saldoViaje = CuentaConductorCalculos.SaldoViaje(viaje.Planilla.TotalGastos, anticipoTraslados);
         var fechaCorte = viaje.FechaFin ?? viaje.Planilla.FechaFinal;
-        var nuevoEstado = saldoViaje == 0m ? EstadoViaje.Saldado : EstadoViaje.Aprobado;
         var ahora = _reloj.GetUtcNow().UtcDateTime;
 
-        var movimiento = await EjecutarAsync(viaje.ConductorId, (saldoAnterior, ct) =>
+        await EjecutarAsync(viaje.ConductorId, (saldoAnterior, ct) =>
             Task.FromResult(NuevoMovimiento(viaje.ConductorId, TipoMovimientoSaldo.CierreViaje, saldoViaje, saldoAnterior.Valor,
                 fechaCorte, null, viajeId, null, usuarioId)),
             cancellationToken,
@@ -111,17 +123,63 @@ public sealed class CuentaConductorService : ICuentaConductorService
             {
                 viaje.SaldoViaje = saldoViaje;
                 viaje.FechaFin = fechaCorte;
-                viaje.Estado = nuevoEstado;
+                // Provisional: si la compensación deja la partida en 0, la sincronización la sube a Saldado.
+                viaje.Estado = EstadoViaje.Aprobado;
                 viaje.AprobadoPorUsuarioId = usuarioId;
                 viaje.AprobadoEn = ahora;
-                _db.Viajes.Update(viaje);
                 await Task.CompletedTask;
             });
 
+        // viaje sigue siendo la misma instancia rastreada: SincronizarEstadosViajesAsync ya actualizó
+        // su Estado (a Saldado) si la compensación dejó la partida en 0.
         await _auditoria.RegistrarAsync(AccionesAuditoria.ViajeCerrado, true, usuarioId, "Viaje", viajeId.ToString(),
-            new { viajeId, saldoViaje, estado = nuevoEstado.ToString(), saldoResultante = movimiento.SaldoResultante }, cancellationToken);
+            new { viajeId, saldoViaje, estado = viaje.Estado.ToString() }, cancellationToken);
 
-        return new CierreViajeResultado(saldoViaje, nuevoEstado, anticipoTraslados, viaje.Planilla.Anticipo);
+        return new CierreViajeResultado(saldoViaje, viaje.Estado, anticipoTraslados, viaje.Planilla.Anticipo);
+    }
+
+    public async Task<MovimientoSaldo> ReabrirViajeAsync(int viajeId, string motivo, Guid? usuarioId, CancellationToken cancellationToken = default)
+    {
+        var viaje = await _db.Viajes.FirstOrDefaultAsync(v => v.Id == viajeId, cancellationToken);
+        if (viaje is null)
+        {
+            throw new ReglaDeNegocioException(StatusCodes.Status404NotFound, "El viaje no existe.");
+        }
+        if (viaje.Estado is not (EstadoViaje.Aprobado or EstadoViaje.Saldado))
+        {
+            throw new ReglaDeNegocioException(StatusCodes.Status409Conflict, "El viaje no está aprobado; no hay nada que reabrir.");
+        }
+        if (await _db.PagosSaldo.AnyAsync(p => p.ViajeId == viajeId, cancellationToken))
+        {
+            throw new ReglaDeNegocioException(StatusCodes.Status409Conflict, "El viaje ya tiene pagos registrados; no se puede reabrir.");
+        }
+
+        var cierre = await _db.MovimientosSaldo.AsNoTracking()
+            .Where(m => m.ViajeId == viajeId && m.Tipo == TipoMovimientoSaldo.CierreViaje)
+            .OrderByDescending(m => m.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (cierre is null)
+        {
+            throw new ReglaDeNegocioException(StatusCodes.Status409Conflict, "No se encontró el cierre del viaje a revertir.");
+        }
+
+        var justificacion = $"Reversión del cierre del viaje #{viajeId} (movimiento #{cierre.Id}): {motivo}";
+        var movimiento = await EjecutarAsync(viaje.ConductorId, (saldoAnterior, ct) =>
+            Task.FromResult(NuevoMovimiento(viaje.ConductorId, TipoMovimientoSaldo.Ajuste, -cierre.Valor, saldoAnterior.Valor,
+                DateOnly.FromDateTime(_reloj.GetUtcNow().UtcDateTime), justificacion, viajeId, null, usuarioId)),
+            cancellationToken,
+            antesDeGuardar: async ct =>
+            {
+                viaje.Estado = EstadoViaje.Abierto;
+                viaje.SaldoViaje = null;
+                viaje.AprobadoEn = null;
+                viaje.AprobadoPorUsuarioId = null;
+                await Task.CompletedTask;
+            });
+
+        await _auditoria.RegistrarAsync(AccionesAuditoria.ViajeReabierto, true, usuarioId, "Viaje", viajeId.ToString(),
+            new { viajeId, motivo, movimientoCierreId = cierre.Id }, cancellationToken);
+        return movimiento;
     }
 
     public async Task<MovimientoSaldo> RegistrarPagoAsync(
@@ -199,6 +257,20 @@ public sealed class CuentaConductorService : ICuentaConductorService
         return (items, total);
     }
 
+    public async Task<IReadOnlyList<PartidaCuenta>> ObtenerPartidasPendientesAsync(int conductorId, CancellationToken cancellationToken = default)
+    {
+        var movimientos = await _db.MovimientosSaldo.AsNoTracking().Where(m => m.ConductorId == conductorId).ToListAsync(cancellationToken);
+        return CompensacionCuenta.Calcular(movimientos).Where(p => p.Pendiente != 0m).OrderBy(p => p.CreadoEn).ToList();
+    }
+
+    public async Task<decimal?> ObtenerPendienteViajeAsync(int viajeId, CancellationToken cancellationToken = default)
+    {
+        var conductorId = await _db.Viajes.AsNoTracking().Where(v => v.Id == viajeId).Select(v => v.ConductorId).FirstOrDefaultAsync(cancellationToken);
+        var movimientos = await _db.MovimientosSaldo.AsNoTracking().Where(m => m.ConductorId == conductorId).ToListAsync(cancellationToken);
+        var partida = CompensacionCuenta.Calcular(movimientos).LastOrDefault(p => p.ViajeId == viajeId);
+        return partida?.Pendiente;
+    }
+
     private readonly record struct SaldoAnterior(decimal Valor, bool TieneMovimientos);
 
     private async Task<SaldoAnterior> UltimoMovimientoAsync(int conductorId, CancellationToken cancellationToken)
@@ -229,8 +301,9 @@ public sealed class CuentaConductorService : ICuentaConductorService
     /// <summary>
     /// Transacción + bloqueo de la fila del conductor (SELECT ... FOR UPDATE): lee el último saldo,
     /// deja que <paramref name="construirMovimiento"/> decida el movimiento (o lance la regla de
-    /// negocio que corresponda), lo inserta y hace commit. <paramref name="antesDeGuardar"/> permite
-    /// aplicar cambios adicionales (p. ej. el estado del viaje) en la misma transacción.
+    /// negocio que corresponda), lo inserta, sincroniza el estado de los viajes del conductor según
+    /// la compensación resultante y hace commit. <paramref name="antesDeGuardar"/> permite aplicar
+    /// cambios adicionales (p. ej. el estado del viaje que originó el movimiento) en la misma transacción.
     /// </summary>
     private async Task<MovimientoSaldo> EjecutarAsync(
         int conductorId,
@@ -259,7 +332,44 @@ public sealed class CuentaConductorService : ICuentaConductorService
 
         _db.MovimientosSaldo.Add(movimiento);
         await _db.SaveChangesAsync(cancellationToken);
+
+        await SincronizarEstadosViajesAsync(conductorId, cancellationToken);
+
         await transaccion.CommitAsync(cancellationToken);
         return movimiento;
+    }
+
+    /// <summary>
+    /// Tras cada movimiento, recalcula la compensación y pone en Saldado los viajes (Aprobado o
+    /// Saldado) cuya partida CierreViaje quedó en 0, o los regresa a Aprobado si volvió a quedar
+    /// pendiente (p. ej. por una reversión de otro viaje que libera cola). Los viajes Abiertos o
+    /// EnRevision no tienen partida y no se tocan aquí.
+    /// </summary>
+    private async Task SincronizarEstadosViajesAsync(int conductorId, CancellationToken cancellationToken)
+    {
+        var movimientos = await _db.MovimientosSaldo.AsNoTracking().Where(m => m.ConductorId == conductorId).ToListAsync(cancellationToken);
+        var pendientePorViaje = CompensacionCuenta.Calcular(movimientos)
+            .Where(p => p.ViajeId is not null)
+            .ToDictionary(p => p.ViajeId!.Value, p => p.Pendiente);
+
+        var viajes = await _db.Viajes
+            .Where(v => v.ConductorId == conductorId && (v.Estado == EstadoViaje.Aprobado || v.Estado == EstadoViaje.Saldado))
+            .ToListAsync(cancellationToken);
+
+        var cambios = false;
+        foreach (var viaje in viajes)
+        {
+            if (!pendientePorViaje.TryGetValue(viaje.Id, out var pendiente)) continue;
+            var nuevoEstado = pendiente == 0m ? EstadoViaje.Saldado : EstadoViaje.Aprobado;
+            if (viaje.Estado != nuevoEstado)
+            {
+                viaje.Estado = nuevoEstado;
+                cambios = true;
+            }
+        }
+        if (cambios)
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+        }
     }
 }

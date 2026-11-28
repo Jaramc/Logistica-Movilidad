@@ -22,12 +22,14 @@ public class ConductoresController : ControllerBase
     private readonly AppDbContext _db;
     private readonly ICuentaConductorService _cuenta;
     private readonly IAuditoriaService _auditoria;
+    private readonly TimeProvider _reloj;
 
-    public ConductoresController(AppDbContext db, ICuentaConductorService cuenta, IAuditoriaService auditoria)
+    public ConductoresController(AppDbContext db, ICuentaConductorService cuenta, IAuditoriaService auditoria, TimeProvider reloj)
     {
         _db = db;
         _cuenta = cuenta;
         _auditoria = auditoria;
+        _reloj = reloj;
     }
 
     [HttpGet]
@@ -55,7 +57,7 @@ public class ConductoresController : ControllerBase
     {
         var conductor = await _db.Conductores.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
         if (conductor is null) return NoEncontrado();
-        return Ok(await ADtoAsync(conductor, cancellationToken));
+        return Ok(await ADtoAsync(conductor, cancellationToken, incluirPartidas: true));
     }
 
     [HttpPost]
@@ -170,11 +172,21 @@ public class ConductoresController : ControllerBase
 
     // ---------------------------------------------------------------- auxiliares
 
-    private async Task<ConductorDto> ADtoAsync(Conductor c, CancellationToken cancellationToken)
+    private async Task<ConductorDto> ADtoAsync(Conductor c, CancellationToken cancellationToken, bool incluirPartidas = false)
     {
         var tieneMovimientos = await _db.MovimientosSaldo.AsNoTracking().AnyAsync(m => m.ConductorId == c.Id, cancellationToken);
         var saldo = tieneMovimientos ? await _cuenta.ObtenerSaldoAsync(c.Id, cancellationToken) : 0m;
-        return new ConductorDto(c.Id, c.Codigo, c.NombreCompleto, Enmascarar(c.Cedula), c.Activo, c.CreadoEn, saldo, tieneMovimientos);
+
+        IReadOnlyList<PartidaPendienteDto> partidas = Array.Empty<PartidaPendienteDto>();
+        if (incluirPartidas && tieneMovimientos)
+        {
+            var ahora = _reloj.GetUtcNow().UtcDateTime;
+            partidas = (await _cuenta.ObtenerPartidasPendientesAsync(c.Id, cancellationToken))
+                .Select(p => new PartidaPendienteDto(p.MovimientoOrigenId, p.ViajeId, p.Pendiente, p.CreadoEn, (int)(ahora - p.CreadoEn).TotalDays))
+                .ToList();
+        }
+
+        return new ConductorDto(c.Id, c.Codigo, c.NombreCompleto, Enmascarar(c.Cedula), c.Activo, c.CreadoEn, saldo, tieneMovimientos, partidas);
     }
 
     private static MovimientoSaldoDto ADto(MovimientoSaldo m) =>

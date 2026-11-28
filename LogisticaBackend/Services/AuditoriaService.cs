@@ -26,6 +26,7 @@ public static class AccionesAuditoria
     public const string ConsolidadoDescargado = "ConsolidadoDescargado";
     public const string SaldoInicialRegistrado = "SaldoInicialRegistrado";
     public const string ViajeCerrado = "ViajeCerrado";
+    public const string ViajeReabierto = "ViajeReabierto";
     public const string PagoRegistrado = "PagoRegistrado";
     public const string AjusteRegistrado = "AjusteRegistrado";
     public const string ConductorCreado = "ConductorCreado";
@@ -33,6 +34,8 @@ public static class AccionesAuditoria
     public const string ConductorDesactivado = "ConductorDesactivado";
     public const string VehiculoCreado = "VehiculoCreado";
     public const string VehiculoDesactivado = "VehiculoDesactivado";
+    public const string ViajeAbierto = "ViajeAbierto";
+    public const string TrasladoRegistrado = "TrasladoRegistrado";
 }
 
 public interface IAuditoriaService

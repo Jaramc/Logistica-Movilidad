@@ -9,8 +9,12 @@ public record ConductorDto(
     bool Activo,
     DateTime CreadoEn,
     decimal Saldo,
-    bool TieneMovimientos
+    bool TieneMovimientos,
+    IReadOnlyList<PartidaPendienteDto> PartidasPendientes
 );
+
+/// <summary>Partida pendiente de la cuenta del conductor (ver CompensacionCuenta). Sirve de base para la alerta de antigüedad de la fase 3.</summary>
+public record PartidaPendienteDto(long MovimientoOrigenId, int? ViajeId, decimal Pendiente, DateTime CreadoEn, int AntiguedadDias);
 
 public record CrearConductorDto(string NombreCompleto, string Cedula);
 
